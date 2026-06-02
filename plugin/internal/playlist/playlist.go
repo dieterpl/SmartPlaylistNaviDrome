@@ -371,7 +371,6 @@ func generateForgottenFavorites() {
 	}
 	json.Unmarshal([]byte(resp), &data)
 
-	seen := make(map[string]bool)
 	var candidates []Song
 	for _, s := range data.SubsonicResponse.Starred2.Song {
 		if s.Played == "" {
@@ -387,51 +386,7 @@ func generateForgottenFavorites() {
 			continue
 		}
 		if t.Before(cutoff) {
-			seen[s.ID] = true
 			candidates = append(candidates, s)
-		}
-	}
-
-	// Fallback: supplement with non-starred songs that have been played multiple times
-	// but not recently. This ensures the playlist appears even without starred songs.
-	if len(candidates) < size {
-		freqResp, _ := host.CallSubsonic("getAlbumList2?type=frequent&size=50")
-		var freqData struct {
-			SubsonicResponse struct {
-				AlbumList2 struct {
-					Album []struct {
-						ID string `json:"id"`
-					} `json:"album"`
-				} `json:"albumList2"`
-			} `json:"subsonic-response"`
-		}
-		json.Unmarshal([]byte(freqResp), &freqData)
-		for _, alb := range freqData.SubsonicResponse.AlbumList2.Album {
-			aResp, _ := host.CallSubsonic(fmt.Sprintf("getAlbum?id=%s", alb.ID))
-			var aData struct {
-				SubsonicResponse struct {
-					Album struct {
-						Song []Song `json:"song"`
-					} `json:"album"`
-				} `json:"subsonic-response"`
-			}
-			json.Unmarshal([]byte(aResp), &aData)
-			for _, s := range aData.SubsonicResponse.Album.Song {
-				if seen[s.ID] || s.PlayCount < 2 || s.Played == "" {
-					continue
-				}
-				t, err := time.Parse(time.RFC3339Nano, s.Played)
-				if err != nil {
-					t, err = time.Parse(time.RFC3339, s.Played)
-				}
-				if err == nil && t.Before(cutoff) {
-					seen[s.ID] = true
-					candidates = append(candidates, s)
-				}
-			}
-			if len(candidates) >= size*2 {
-				break
-			}
 		}
 	}
 
