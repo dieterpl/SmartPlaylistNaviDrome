@@ -1,7 +1,7 @@
 {
   "name": "Smart Playlist",
   "author": "dieterpl",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Generates dynamic Spotify-style playlists: genre-aware daily mixes, On Repeat, Release Radar, Loved Songs Mix, and taste-sorted Artist/Genre Radios.",
   "permissions": {
     "scheduler": {
@@ -84,6 +84,12 @@
           "type": "boolean",
           "title": "Enable On Repeat Playlist",
           "default": true
+        },
+        "onRepeatRecentDays": {
+          "type": "integer",
+          "title": "On Repeat: Recency Window (days)",
+          "default": 90,
+          "minimum": 1
         },
         "enableReleaseRadar": {
           "type": "boolean",

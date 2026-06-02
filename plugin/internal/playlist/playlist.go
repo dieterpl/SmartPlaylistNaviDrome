@@ -371,10 +371,11 @@ func generateForgottenFavorites() {
 	}
 	json.Unmarshal([]byte(resp), &data)
 
+	seen := make(map[string]bool)
 	var candidates []Song
 	for _, s := range data.SubsonicResponse.Starred2.Song {
 		if s.Played == "" {
-			continue // never played — not "forgotten"
+			continue
 		}
 		// RFC3339Nano handles sub-second precision (Navidrome emits e.g. "2024-01-15T10:30:00.000Z");
 		// fall back to RFC3339 for timestamps without fractional seconds.
@@ -383,16 +384,78 @@ func generateForgottenFavorites() {
 			t, err = time.Parse(time.RFC3339, s.Played)
 		}
 		if err != nil {
-			continue // unparseable timestamp — skip rather than misclassify
+			continue
 		}
 		if t.Before(cutoff) {
+			seen[s.ID] = true
 			candidates = append(candidates, s)
 		}
 	}
+
+	// Fallback: supplement with non-starred songs that have been played multiple times
+	// but not recently. This ensures the playlist appears even without starred songs.
+	if len(candidates) < size {
+		freqResp, _ := host.CallSubsonic("getAlbumList2?type=frequent&size=50")
+		var freqData struct {
+			SubsonicResponse struct {
+				AlbumList2 struct {
+					Album []struct {
+						ID string `json:"id"`
+					} `json:"album"`
+				} `json:"albumList2"`
+			} `json:"subsonic-response"`
+		}
+		json.Unmarshal([]byte(freqResp), &freqData)
+		for _, alb := range freqData.SubsonicResponse.AlbumList2.Album {
+			aResp, _ := host.CallSubsonic(fmt.Sprintf("getAlbum?id=%s", alb.ID))
+			var aData struct {
+				SubsonicResponse struct {
+					Album struct {
+						Song []Song `json:"song"`
+					} `json:"album"`
+				} `json:"subsonic-response"`
+			}
+			json.Unmarshal([]byte(aResp), &aData)
+			for _, s := range aData.SubsonicResponse.Album.Song {
+				if seen[s.ID] || s.PlayCount < 2 || s.Played == "" {
+					continue
+				}
+				t, err := time.Parse(time.RFC3339Nano, s.Played)
+				if err != nil {
+					t, err = time.Parse(time.RFC3339, s.Played)
+				}
+				if err == nil && t.Before(cutoff) {
+					seen[s.ID] = true
+					candidates = append(candidates, s)
+				}
+			}
+			if len(candidates) >= size*2 {
+				break
+			}
+		}
+	}
+
 	if len(candidates) == 0 {
 		return
 	}
 	createPlaylist("Forgotten Favorites", smartSelect(candidates, size))
+}
+
+func filterByRecency(songs []Song, cutoff time.Time) []Song {
+	var out []Song
+	for _, s := range songs {
+		if s.Played == "" {
+			continue
+		}
+		t, err := time.Parse(time.RFC3339Nano, s.Played)
+		if err != nil {
+			t, err = time.Parse(time.RFC3339, s.Played)
+		}
+		if err == nil && t.After(cutoff) {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func generateOnRepeat() {
@@ -400,6 +463,9 @@ func generateOnRepeat() {
 		return
 	}
 	size := host.GetConfigInt("dailySize", 30)
+	recentDays := host.GetConfigInt("onRepeatRecentDays", 90)
+	cutoff := time.Now().AddDate(0, 0, -recentDays)
+
 	artists := getFrequentArtists(5)
 	if len(artists) == 0 {
 		return
@@ -408,10 +474,45 @@ func generateOnRepeat() {
 	if countPerArtist < 10 {
 		countPerArtist = 10
 	}
-	songs := getTopSongsForArtists(artists, countPerArtist)
+	songs := filterByRecency(getTopSongsForArtists(artists, countPerArtist), cutoff)
+
+	// Pad with songs from recently-played albums (still filtered by recency).
 	if len(songs) < size {
-		resp, _ := host.CallSubsonic(fmt.Sprintf("getRandomSongs?size=%d", size*5))
-		songs = append(songs, getSongs(resp)...)
+		resp, _ := host.CallSubsonic(fmt.Sprintf("getAlbumList2?type=recent&size=%d", size))
+		var recentData struct {
+			SubsonicResponse struct {
+				AlbumList2 struct {
+					Album []struct {
+						ID string `json:"id"`
+					} `json:"album"`
+				} `json:"albumList2"`
+			} `json:"subsonic-response"`
+		}
+		json.Unmarshal([]byte(resp), &recentData)
+		seen := make(map[string]bool)
+		for _, s := range songs {
+			seen[s.ID] = true
+		}
+		for _, alb := range recentData.SubsonicResponse.AlbumList2.Album {
+			aResp, _ := host.CallSubsonic(fmt.Sprintf("getAlbum?id=%s", alb.ID))
+			var aData struct {
+				SubsonicResponse struct {
+					Album struct {
+						Song []Song `json:"song"`
+					} `json:"album"`
+				} `json:"subsonic-response"`
+			}
+			json.Unmarshal([]byte(aResp), &aData)
+			for _, s := range filterByRecency(aData.SubsonicResponse.Album.Song, cutoff) {
+				if !seen[s.ID] {
+					seen[s.ID] = true
+					songs = append(songs, s)
+				}
+			}
+			if len(songs) >= size*3 {
+				break
+			}
+		}
 	}
 	createPlaylist("On Repeat", smartSelect(songs, size))
 }
@@ -607,14 +708,9 @@ func GenerateDailyMixes() {
 func generateArtistRadio(slot int, artistName, artistId string, size int, allPlaylists []PlaylistInfo) {
 	pdk.Log(pdk.LogInfo, fmt.Sprintf("Smart Playlist: Generating Artist Radio %d for: %s", slot, artistName))
 	slotMarker := fmt.Sprintf("Artist Radio %d:", slot)
-	var reuseID string
 	for _, p := range allPlaylists {
 		if strings.Contains(p.Name, slotMarker) {
-			if reuseID == "" {
-				reuseID = p.ID
-			} else {
-				deletePlaylist(p.ID)
-			}
+			deletePlaylist(p.ID)
 		}
 	}
 	baseName := fmt.Sprintf("Artist Radio %d: %s", slot, artistName)
@@ -649,33 +745,31 @@ func generateArtistRadio(slot int, artistName, artistId string, size int, allPla
 			}
 		}
 	}
+	// Keep only songs that actually belong to this artist to prevent cross-artist contamination.
+	if artistId != "" {
+		var filtered []Song
+		for _, s := range songs {
+			if s.ArtistId == artistId {
+				filtered = append(filtered, s)
+			}
+		}
+		songs = filtered
+	}
 	selected := smartSelect(songs, size)
 	if len(selected) == 0 {
 		return
 	}
 	prefix := host.GetConfigString("prefix", "✨ ")
 	fullName := prefix + baseName
-	songParam := buildSongParam(selected)
-	var uri string
-	if reuseID != "" {
-		uri = fmt.Sprintf("createPlaylist?playlistId=%s&name=%s&songId=%s", reuseID, url.QueryEscape(fullName), songParam)
-	} else {
-		uri = fmt.Sprintf("createPlaylist?name=%s&songId=%s", url.QueryEscape(fullName), songParam)
-	}
-	host.CallSubsonic(uri)
+	host.CallSubsonic(fmt.Sprintf("createPlaylist?name=%s&songId=%s", url.QueryEscape(fullName), buildSongParam(selected)))
 }
 
 func generateGenreRadio(slot int, genreName string, size int, allPlaylists []PlaylistInfo) {
 	pdk.Log(pdk.LogInfo, fmt.Sprintf("Smart Playlist: Generating Genre Radio %d for: %s", slot, genreName))
 	slotMarker := fmt.Sprintf("Genre Radio %d:", slot)
-	var reuseID string
 	for _, p := range allPlaylists {
 		if strings.Contains(p.Name, slotMarker) {
-			if reuseID == "" {
-				reuseID = p.ID
-			} else {
-				deletePlaylist(p.ID)
-			}
+			deletePlaylist(p.ID)
 		}
 	}
 	baseName := fmt.Sprintf("Genre Radio %d: %s", slot, genreName)
@@ -687,14 +781,7 @@ func generateGenreRadio(slot int, genreName string, size int, allPlaylists []Pla
 	}
 	prefix := host.GetConfigString("prefix", "✨ ")
 	fullName := prefix + baseName
-	songParam := buildSongParam(selected)
-	var uri string
-	if reuseID != "" {
-		uri = fmt.Sprintf("createPlaylist?playlistId=%s&name=%s&songId=%s", reuseID, url.QueryEscape(fullName), songParam)
-	} else {
-		uri = fmt.Sprintf("createPlaylist?name=%s&songId=%s", url.QueryEscape(fullName), songParam)
-	}
-	host.CallSubsonic(uri)
+	host.CallSubsonic(fmt.Sprintf("createPlaylist?name=%s&songId=%s", url.QueryEscape(fullName), buildSongParam(selected)))
 }
 
 func GenerateWeeklyMixes() {
@@ -764,6 +851,7 @@ func GetConfigHash() string {
 	nar := host.GetConfigInt("numArtistRadios", 5)
 	ngr := host.GetConfigInt("numGenreRadios", 3)
 	ftd := host.GetConfigInt("forgottenThresholdDays", 180)
+	ord := host.GetConfigInt("onRepeatRecentDays", 90)
 	onRepeat := host.GetConfigString("enableOnRepeat", "true")
 	releaseRadar := host.GetConfigString("enableReleaseRadar", "true")
 	lovedMix := host.GetConfigString("enableLovedMix", "true")
@@ -771,8 +859,8 @@ func GetConfigHash() string {
 	artistRadio := host.GetConfigString("enableArtistRadio", "true")
 	genreRadio := host.GetConfigString("enableGenreRadio", "true")
 	forgotten := host.GetConfigString("enableForgottenFavorites", "true")
-	return fmt.Sprintf("%s-%d-%d-%d-%d-%d-%d-%d-%s-%s-%s-%s-%s-%s-%s",
-		prefix, ds, ws, ars, dmc, nar, ngr, ftd,
+	return fmt.Sprintf("%s-%d-%d-%d-%d-%d-%d-%d-%d-%s-%s-%s-%s-%s-%s-%s",
+		prefix, ds, ws, ars, dmc, nar, ngr, ftd, ord,
 		onRepeat, releaseRadar, lovedMix, dailyDisc, artistRadio, genreRadio, forgotten)
 }
 
