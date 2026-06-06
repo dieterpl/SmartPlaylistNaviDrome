@@ -54,6 +54,7 @@ func nd_on_init() int32 {
 
 //export nd_scheduler_callback
 func nd_scheduler_callback() int32 {
+	playlist.GlobalCleanup()
 	lastDaily, _ := host.KvGet("last_daily_update")
 	lastWeekly, _ := host.KvGet("last_weekly_update")
 	lastHash, _ := host.KvGet("config_hash")

@@ -1,7 +1,7 @@
 {
   "name": "Smart Playlist",
   "author": "dieterpl",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Generates dynamic Spotify-style playlists: genre-aware daily mixes, On Repeat, Release Radar, Loved Songs Mix, and taste-sorted Artist/Genre Radios.",
   "permissions": {
     "scheduler": {
@@ -65,9 +65,9 @@
           "minimum": 1,
           "maximum": 10
         },
-        "enableWeeklyDiscovery": {
+        "enableDailyDiscovery": {
           "type": "boolean",
-          "title": "Enable Weekly Discovery",
+          "title": "Enable Daily Discovery",
           "default": true
         },
         "enableArtistRadio": {
@@ -85,6 +85,12 @@
           "title": "Enable On Repeat Playlist",
           "default": true
         },
+        "onRepeatRecentDays": {
+          "type": "integer",
+          "title": "On Repeat: Recency Window (days)",
+          "default": 90,
+          "minimum": 1
+        },
         "enableReleaseRadar": {
           "type": "boolean",
           "title": "Enable Release Radar",
@@ -94,6 +100,17 @@
           "type": "boolean",
           "title": "Enable Loved Songs Mix",
           "default": true
+        },
+        "enableForgottenFavorites": {
+          "type": "boolean",
+          "title": "Enable Forgotten Favorites",
+          "default": true
+        },
+        "forgottenThresholdDays": {
+          "type": "integer",
+          "title": "Forgotten Favorites Threshold (days)",
+          "default": 180,
+          "minimum": 1
         }
       }
     }
