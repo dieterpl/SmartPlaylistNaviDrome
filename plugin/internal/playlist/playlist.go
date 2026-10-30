@@ -56,6 +56,26 @@ type newestAlbumEntry struct {
 	ArtistId string
 }
 
+type UserConfig struct {
+	Username               string `json:"username"`
+	Prefix                 string `json:"prefix"`
+	DailySize              int    `json:"dailySize"`
+	WeeklySize             int    `json:"weeklySize"`
+	DailyMixCount          int    `json:"dailyMixCount"`
+	NumArtistRadios        int    `json:"numArtistRadios"`
+	ArtistRadioSize        int    `json:"artistRadioSize"`
+	NumGenreRadios         int    `json:"numGenreRadios"`
+	EnableDailyDiscovery   bool   `json:"enableDailyDiscovery"`
+	EnableArtistRadio      bool   `json:"enableArtistRadio"`
+	EnableGenreRadio       bool   `json:"enableGenreRadio"`
+	EnableOnRepeat         bool   `json:"enableOnRepeat"`
+	OnRepeatRecentDays     int    `json:"onRepeatRecentDays"`
+	EnableReleaseRadar     bool   `json:"enableReleaseRadar"`
+	EnableLovedMix         bool   `json:"enableLovedMix"`
+	EnableForgottenFavorites bool   `json:"enableForgottenFavorites"`
+	ForgottenThresholdDays int    `json:"forgottenThresholdDays"`
+}
+
 // --- Subsonic helpers ---
 
 func getSongs(respJSON string) []Song {
