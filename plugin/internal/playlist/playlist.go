@@ -78,6 +78,15 @@ type UserConfig struct {
 
 // --- Subsonic helpers ---
 
+func getConfigs() []UserConfig {
+	resp := host.GetUserSettings()
+	var configs []UserConfig
+	if err := json.Unmarshal([]byte(resp), &configs); err != nil {
+		pdk.Log(pdk.LogError, fmt.Sprintf("Smart Playlist: Error unmarshaling user settings: %v", err))
+	}
+	return configs
+}
+
 func getSongs(respJSON string) []Song {
 	var data struct {
 		SubsonicResponse struct {
