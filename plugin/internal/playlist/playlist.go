@@ -204,7 +204,7 @@ func createPlaylist(baseName string, ids []string) {
 	host.CallSubsonic(uri)
 }
 
-func fetchNewestAlbums(count int) []newestAlbumEntry {
+func fetchNewestAlbums(username string, count int) []newestAlbumEntry {
 	type entry struct {
 		ID       string `json:"id"`
 		ArtistId string `json:"artistId"`
@@ -214,7 +214,7 @@ func fetchNewestAlbums(count int) []newestAlbumEntry {
 			AlbumList2 struct{ Album []entry `json:"album"` } `json:"albumList2"`
 		} `json:"subsonic-response"`
 	}
-	resp, _ := host.CallSubsonic(fmt.Sprintf("getAlbumList2?type=newest&size=%d", count))
+	resp, _ := host.CallSubsonic(fmt.Sprintf("getAlbumList2?type=newest&size=%d", count), username)
 	json.Unmarshal([]byte(resp), &data)
 	var result []newestAlbumEntry
 	for _, a := range data.SubsonicResponse.AlbumList2.Album {
