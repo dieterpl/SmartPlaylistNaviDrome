@@ -142,13 +142,13 @@ func getFrequentArtists(username string, maxCount int) []FrequentArtist {
 	return artists
 }
 
-func getTopSongsForArtists(artists []FrequentArtist, countPerArtist int) []Song {
+func getTopSongsForArtists(username string, artists []FrequentArtist, countPerArtist int) []Song {
 	var all []Song
 	for _, artist := range artists {
-		resp, _ := host.CallSubsonic(fmt.Sprintf("getTopSongs?artist=%s&count=%d", url.QueryEscape(artist.Name), countPerArtist))
+		resp, _ := host.CallSubsonic(fmt.Sprintf("getTopSongs?artist=%s&count=%d", url.QueryEscape(artist.Name), countPerArtist), username)
 		songs := getSongs(resp)
 		if len(songs) == 0 {
-			resp, _ = host.CallSubsonic(fmt.Sprintf("search3?query=%s&songCount=%d", url.QueryEscape(artist.Name), countPerArtist))
+			resp, _ = host.CallSubsonic(fmt.Sprintf("search3?query=%s&songCount=%d", url.QueryEscape(artist.Name), countPerArtist), username)
 			songs = getSongs(resp)
 		}
 		all = append(all, songs...)
