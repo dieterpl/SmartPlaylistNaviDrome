@@ -156,8 +156,8 @@ func getTopSongsForArtists(username string, artists []FrequentArtist, countPerAr
 	return all
 }
 
-func getAllPlaylists() []PlaylistInfo {
-	resp, _ := host.CallSubsonic("getPlaylists")
+func getAllPlaylists(username string) []PlaylistInfo {
+	resp, _ := host.CallSubsonic("getPlaylists", username)
 	var data struct {
 		SubsonicResponse struct {
 			Playlists struct {
