@@ -502,11 +502,11 @@ func generateOnRepeat(username string, config *UserConfig) {
 	createPlaylist(username, config, "On Repeat", smartSelect(songs, size))
 }
 
-func generateReleaseRadar(familiarSet map[string]bool, newest []newestAlbumEntry) {
-	if host.GetConfigString("enableReleaseRadar", "true") != "true" {
+func generateReleaseRadar(username string, config *UserConfig, familiarSet map[string]bool, newest []newestAlbumEntry) {
+	if !config.EnableReleaseRadar {
 		return
 	}
-	size := host.GetConfigInt("weeklySize", 25)
+	size := config.WeeklySize
 
 	// Albums the user has already played — used to promote new additions they started exploring
 	type albumIDEntry struct {
@@ -517,7 +517,7 @@ func generateReleaseRadar(familiarSet map[string]bool, newest []newestAlbumEntry
 			AlbumList2 struct{ Album []albumIDEntry `json:"album"` } `json:"albumList2"`
 		} `json:"subsonic-response"`
 	}
-	resp, _ := host.CallSubsonic("getAlbumList2?type=recent&size=50")
+	resp, _ := host.CallSubsonic("getAlbumList2?type=recent&size=50", username)
 	json.Unmarshal([]byte(resp), &recentData)
 	recentlyPlayedSet := make(map[string]bool)
 	for _, a := range recentData.SubsonicResponse.AlbumList2.Album {
@@ -566,7 +566,7 @@ func generateReleaseRadar(familiarSet map[string]bool, newest []newestAlbumEntry
 		if len(songs) >= poolTarget {
 			break
 		}
-		aResp, _ := host.CallSubsonic(fmt.Sprintf("getAlbum?id=%s", albumID))
+		aResp, _ := host.CallSubsonic(fmt.Sprintf("getAlbum?id=%s", albumID), username)
 		var aData struct {
 			SubsonicResponse struct {
 				Album struct{ Song []Song `json:"song"` } `json:"album"`
@@ -581,10 +581,10 @@ func generateReleaseRadar(familiarSet map[string]bool, newest []newestAlbumEntry
 		songs = append(songs, albumSongs...)
 	}
 	if len(songs) < size {
-		resp, _ = host.CallSubsonic(fmt.Sprintf("getRandomSongs?size=%d", size*5))
+		resp, _ = host.CallSubsonic(fmt.Sprintf("getRandomSongs?size=%d", size*5), username)
 		songs = append(songs, getSongs(resp)...)
 	}
-	createPlaylist("Release Radar", smartSelect(songs, size))
+	createPlaylist(username, config, "Release Radar", smartSelect(songs, size))
 }
 
 func generateLovedSongsMix() {
