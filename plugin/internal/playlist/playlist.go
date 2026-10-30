@@ -443,15 +443,15 @@ func filterByRecency(songs []Song, cutoff time.Time) []Song {
 	return out
 }
 
-func generateOnRepeat() {
-	if host.GetConfigString("enableOnRepeat", "true") != "true" {
+func generateOnRepeat(username string, config *UserConfig) {
+	if !config.EnableOnRepeat {
 		return
 	}
-	size := host.GetConfigInt("dailySize", 30)
-	recentDays := host.GetConfigInt("onRepeatRecentDays", 90)
+	size := config.DailySize
+	recentDays := config.OnRepeatRecentDays
 	cutoff := time.Now().AddDate(0, 0, -recentDays)
 
-	artists := getFrequentArtists(5)
+	artists := getFrequentArtists(username, 5)
 	if len(artists) == 0 {
 		return
 	}
@@ -459,11 +459,11 @@ func generateOnRepeat() {
 	if countPerArtist < 10 {
 		countPerArtist = 10
 	}
-	songs := filterByRecency(getTopSongsForArtists(artists, countPerArtist), cutoff)
+	songs := filterByRecency(getTopSongsForArtists(username, artists, countPerArtist), cutoff)
 
 	// Pad with songs from recently-played albums (still filtered by recency).
 	if len(songs) < size {
-		resp, _ := host.CallSubsonic(fmt.Sprintf("getAlbumList2?type=recent&size=%d", size))
+		resp, _ := host.CallSubsonic(fmt.Sprintf("getAlbumList2?type=recent&size=%d", size), username)
 		var recentData struct {
 			SubsonicResponse struct {
 				AlbumList2 struct {
@@ -479,7 +479,7 @@ func generateOnRepeat() {
 			seen[s.ID] = true
 		}
 		for _, alb := range recentData.SubsonicResponse.AlbumList2.Album {
-			aResp, _ := host.CallSubsonic(fmt.Sprintf("getAlbum?id=%s", alb.ID))
+			aResp, _ := host.CallSubsonic(fmt.Sprintf("getAlbum?id=%s", alb.ID), username)
 			var aData struct {
 				SubsonicResponse struct {
 					Album struct {
@@ -499,7 +499,7 @@ func generateOnRepeat() {
 			}
 		}
 	}
-	createPlaylist("On Repeat", smartSelect(songs, size))
+	createPlaylist(username, config, "On Repeat", smartSelect(songs, size))
 }
 
 func generateReleaseRadar(familiarSet map[string]bool, newest []newestAlbumEntry) {
