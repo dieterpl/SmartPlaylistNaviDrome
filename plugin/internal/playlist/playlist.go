@@ -776,55 +776,61 @@ func GenerateDailyMixes() {
 
 func GenerateWeeklyMixes() {
 	pdk.Log(pdk.LogInfo, "Smart Playlist: Refreshing Weekly Mixes...")
-	size := host.GetConfigInt("weeklySize", 25)
-	artistRadioSize := host.GetConfigInt("artistRadioSize", 30)
+	configs := getConfigs()
+	for i := range configs {
+		config := &configs[i]
+		username := config.Username
+		pdk.Log(pdk.LogInfo, fmt.Sprintf("Smart Playlist: [USER LOOP] Refreshing Weekly Mixes for user: %s (Prefix: %s, Size: %d)", username, config.Prefix, config.WeeklySize))
+		size := config.WeeklySize
+		artistRadioSize := config.ArtistRadioSize
 
-	generateLovedSongsMix()
-	generateForgottenFavorites()
+		generateLovedSongsMix(username, config)
+		generateForgottenFavorites(username, config)
 
-	// Fetch playlist list once; pass it into radio generators to avoid N+1 getPlaylists calls.
-	radioPlaylists := getAllPlaylists()
+		// Fetch playlist list once; pass it into radio generators to avoid N+1 getPlaylists calls.
+		radioPlaylists := getAllPlaylists(username)
 
-	if host.GetConfigString("enableArtistRadio", "true") == "true" {
-		numArtistRadios := host.GetConfigInt("numArtistRadios", 5)
-		if numArtistRadios < 1 {
-			numArtistRadios = 1
+		if config.EnableArtistRadio {
+			numArtistRadios := config.NumArtistRadios
+			if numArtistRadios < 1 {
+				numArtistRadios = 1
+			}
+			if numArtistRadios > 20 {
+				numArtistRadios = 20
+			}
+			artists := getFrequentArtists(username, numArtistRadios)
+			for j, artist := range artists {
+				generateArtistRadio(username, config, j+1, artist.Name, artist.ID, artistRadioSize, radioPlaylists)
+			}
 		}
-		if numArtistRadios > 20 {
-			numArtistRadios = 20
-		}
-		artists := getFrequentArtists(numArtistRadios)
-		for i, artist := range artists {
-			generateArtistRadio(i+1, artist.Name, artist.ID, artistRadioSize, radioPlaylists)
-		}
-	}
 
-	if host.GetConfigString("enableGenreRadio", "true") == "true" {
-		numGenreRadios := host.GetConfigInt("numGenreRadios", 3)
-		if numGenreRadios < 1 {
-			numGenreRadios = 1
-		}
-		if numGenreRadios > 10 {
-			numGenreRadios = 10
-		}
-		resp, _ := host.CallSubsonic("getGenres")
-		var genreData struct {
-			SubsonicResponse struct {
-				Genres struct {
-					Genre []struct {
-						Value     string `json:"value"`
-						SongCount int    `json:"songCount"`
-					} `json:"genre"`
-				} `json:"genres"`
-			} `json:"subsonic-response"`
-		}
-		json.Unmarshal([]byte(resp), &genreData)
-		genres := genreData.SubsonicResponse.Genres.Genre
-		sort.Slice(genres, func(i, j int) bool {
-			return genres[i].SongCount > genres[j].SongCount
-		})
-		for i := 0; i < numGenreRadios && i < len(genres); i++ {
-			generateGenreRadio(i+1, genres[i].Value, size, radioPlaylists)
+		if config.EnableGenreRadio {
+			numGenreRadios := config.NumGenreRadios
+			if numGenreRadios < 1 {
+				numGenreRadios = 1
+			}
+			if numGenreRadios > 10 {
+				numGenreRadios = 10
+			}
+			resp, _ := host.CallSubsonic("getGenres", username)
+			var genreData struct {
+				SubsonicResponse struct {
+					Genres struct {
+						Genre []struct {
+							Value     string `json:"value"`
+							SongCount int    `json:"songCount"`
+						} `json:"genre"`
+					} `json:"genres"`
+				} `json:"subsonic-response"`
+			}
+			json.Unmarshal([]byte(resp), &genreData)
+			genres := genreData.SubsonicResponse.Genres.Genre
+			sort.Slice(genres, func(i, j int) bool {
+				return genres[i].SongCount > genres[j].SongCount
+			})
+			for j := 0; j < numGenreRadios && j < len(genres); j++ {
+				generateGenreRadio(username, config, j+1, genres[j].Value, size, radioPlaylists)
+			}
 		}
 	}
 
