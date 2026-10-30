@@ -587,12 +587,12 @@ func generateReleaseRadar(username string, config *UserConfig, familiarSet map[s
 	createPlaylist(username, config, "Release Radar", smartSelect(songs, size))
 }
 
-func generateLovedSongsMix() {
-	if host.GetConfigString("enableLovedMix", "true") != "true" {
+func generateLovedSongsMix(username string, config *UserConfig) {
+	if !config.EnableLovedMix {
 		return
 	}
-	size := host.GetConfigInt("weeklySize", 25)
-	resp, _ := host.CallSubsonic("getStarred2")
+	size := config.WeeklySize
+	resp, _ := host.CallSubsonic("getStarred2", username)
 	var data struct {
 		SubsonicResponse struct {
 			Starred2 struct {
@@ -606,7 +606,7 @@ func generateLovedSongsMix() {
 		return
 	}
 	rand.Shuffle(len(songs), func(i, j int) { songs[i], songs[j] = songs[j], songs[i] })
-	createPlaylist("Your Loved Songs Mix", smartSelect(songs, size))
+	createPlaylist(username, config, "Your Loved Songs Mix", smartSelect(songs, size))
 }
 
 func GenerateDailyMixes() {
