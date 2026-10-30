@@ -41,8 +41,9 @@ type Song struct {
 }
 
 type PlaylistInfo struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Owner string `json:"owner"`
 }
 
 type FrequentArtist struct {
