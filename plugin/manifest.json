@@ -129,6 +129,91 @@
           }
         }
       }
+    },
+    "uiSchema": {
+      "type": "VerticalLayout",
+      "elements": [
+        {
+          "type": "Control",
+          "scope": "#/properties/userSettings",
+          "options": {
+            "elementLabelProp": "username",
+            "detail": {
+              "type": "VerticalLayout",
+              "elements": [
+                {
+                  "type": "Control",
+                  "scope": "#/properties/username"
+                },
+                {
+                  "type": "Control",
+                  "scope": "#/properties/artistRadioSize"
+                },
+                {
+                  "type": "Control",
+                  "scope": "#/properties/dailyMixCount"
+                },
+                {
+                  "type": "Control",
+                  "scope": "#/properties/dailySize"
+                },
+                {
+                  "type": "Control",
+                  "scope": "#/properties/enableArtistRadio"
+                },
+                {
+                  "type": "Control",
+                  "scope": "#/properties/enableDailyDiscovery"
+                },
+                {
+                  "type": "Control",
+                  "scope": "#/properties/enableForgottenFavorites"
+                },
+                {
+                  "type": "Control",
+                  "scope": "#/properties/enableGenreRadio"
+                },
+                {
+                  "type": "Control",
+                  "scope": "#/properties/enableLovedMix"
+                },
+                {
+                  "type": "Control",
+                  "scope": "#/properties/enableOnRepeat"
+                },
+                {
+                  "type": "Control",
+                  "scope": "#/properties/enableReleaseRadar"
+                },
+                {
+                  "type": "Control",
+                  "scope": "#/properties/forgottenThresholdDays"
+                },
+                {
+                  "type": "Control",
+                  "scope": "#/properties/numArtistRadios"
+                },
+                {
+                  "type": "Control",
+                  "scope": "#/properties/numGenreRadios"
+                },
+                {
+                  "type": "Control",
+                  "scope": "#/properties/onRepeatRecentDays"
+                },
+                {
+                  "type": "Control",
+                  "scope": "#/properties/prefix"
+                },
+                {
+                  "type": "Control",
+                  "scope": "#/properties/weeklySize"
+                }
+              ]
+            }
+          }
+        }
+      ]
     }
   }
 }
