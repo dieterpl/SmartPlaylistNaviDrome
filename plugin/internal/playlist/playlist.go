@@ -311,11 +311,11 @@ func smartSelect(songs []Song, targetSize int) []string {
 
 // --- Generators ---
 
-func generateDailyDiscovery(familiarSet map[string]bool, newest []newestAlbumEntry) {
-	if host.GetConfigString("enableDailyDiscovery", "true") != "true" {
+func generateDailyDiscovery(username string, config *UserConfig, familiarSet map[string]bool, newest []newestAlbumEntry) {
+	if !config.EnableDailyDiscovery {
 		return
 	}
-	size := host.GetConfigInt("dailySize", 30)
+	size := config.DailySize
 	poolTarget := size * 5
 	perAlbumCap := size / 8
 	if perAlbumCap < 2 {
@@ -333,7 +333,7 @@ func generateDailyDiscovery(familiarSet map[string]bool, newest []newestAlbumEnt
 	}
 
 	fetchAlbumSongs := func(albumID string) []Song {
-		aResp, _ := host.CallSubsonic(fmt.Sprintf("getAlbum?id=%s", albumID))
+		aResp, _ := host.CallSubsonic(fmt.Sprintf("getAlbum?id=%s", albumID), username)
 		var aData struct {
 			SubsonicResponse struct {
 				Album struct{ Song []Song `json:"song"` } `json:"album"`
@@ -376,11 +376,11 @@ func generateDailyDiscovery(familiarSet map[string]bool, newest []newestAlbumEnt
 
 	// Pad with random songs to reach pool target
 	if len(songs) < poolTarget {
-		padResp, _ := host.CallSubsonic(fmt.Sprintf("getRandomSongs?size=%d", poolTarget-len(songs)))
+		padResp, _ := host.CallSubsonic(fmt.Sprintf("getRandomSongs?size=%d", poolTarget-len(songs)), username)
 		songs = append(songs, getSongs(padResp)...)
 	}
 
-	createPlaylist("Daily Discovery", smartSelect(songs, size))
+	createPlaylist(username, config, "Daily Discovery", smartSelect(songs, size))
 }
 
 func generateForgottenFavorites() {
