@@ -863,99 +863,106 @@ func GetConfigHash() string {
 func GlobalCleanup() {
 	pdk.Log(pdk.LogInfo, "Smart Playlist: Performing global cleanup...")
 
-	dailyMixCount := host.GetConfigInt("dailyMixCount", 3)
-	if dailyMixCount < 1 {
-		dailyMixCount = 1
-	}
-	if dailyMixCount > 6 {
-		dailyMixCount = 6
-	}
-	numArtistRadios := host.GetConfigInt("numArtistRadios", 5)
-	if numArtistRadios < 1 {
-		numArtistRadios = 1
-	}
-	if numArtistRadios > 20 {
-		numArtistRadios = 20
-	}
-	numGenreRadios := host.GetConfigInt("numGenreRadios", 3)
-	if numGenreRadios < 1 {
-		numGenreRadios = 1
-	}
-	if numGenreRadios > 10 {
-		numGenreRadios = 10
-	}
-	onRepeatEnabled := host.GetConfigString("enableOnRepeat", "true") == "true"
-	releaseRadarEnabled := host.GetConfigString("enableReleaseRadar", "true") == "true"
-	lovedMixEnabled := host.GetConfigString("enableLovedMix", "true") == "true"
-	dailyDiscoveryEnabled := host.GetConfigString("enableDailyDiscovery", "true") == "true"
-	artistRadioEnabled := host.GetConfigString("enableArtistRadio", "true") == "true"
-	genreRadioEnabled := host.GetConfigString("enableGenreRadio", "true") == "true"
-	forgottenEnabled := host.GetConfigString("enableForgottenFavorites", "true") == "true"
+	configs := getConfigs()
+	for _, config := range configs {
+		username := config.Username
+		dailyMixCount := config.DailyMixCount
+		if dailyMixCount < 1 {
+			dailyMixCount = 1
+		}
+		if dailyMixCount > 6 {
+			dailyMixCount = 6
+		}
+		numArtistRadios := config.NumArtistRadios
+		if numArtistRadios < 1 {
+			numArtistRadios = 1
+		}
+		if numArtistRadios > 20 {
+			numArtistRadios = 20
+		}
+		numGenreRadios := config.NumGenreRadios
+		if numGenreRadios < 1 {
+			numGenreRadios = 1
+		}
+		if numGenreRadios > 10 {
+			numGenreRadios = 10
+		}
+		onRepeatEnabled := config.EnableOnRepeat
+		releaseRadarEnabled := config.EnableReleaseRadar
+		lovedMixEnabled := config.EnableLovedMix
+		dailyDiscoveryEnabled := config.EnableDailyDiscovery
+		artistRadioEnabled := config.EnableArtistRadio
+		genreRadioEnabled := config.EnableGenreRadio
+		forgottenEnabled := config.EnableForgottenFavorites
 
-	playlists := getAllPlaylists()
-	seenBaseNames := make(map[string]string)
+		playlists := getAllPlaylists(username)
+		seenBaseNames := make(map[string]string)
 
-	for _, p := range playlists {
-		isSmart := false
-		baseName := ""
-		deleteNow := false
+					for _, p := range playlists {
+				if p.Owner != username {
+					continue
+				}
+			isSmart := false
+			baseName := ""
+			deleteNow := false
 
-		switch {
-		case strings.Contains(p.Name, "Daily Mix "):
-			isSmart = true
-			for i := 1; i <= 6; i++ {
-				slotStr := fmt.Sprintf("Daily Mix %d", i)
-				if strings.HasSuffix(p.Name, slotStr) {
-					baseName = slotStr
-					deleteNow = i > dailyMixCount
-					break
+			switch {
+			case strings.Contains(p.Name, config.Prefix+"Daily Mix "):
+				isSmart = true
+				for i := 1; i <= 6; i++ {
+					slotStr := config.Prefix + fmt.Sprintf("Daily Mix %d", i)
+					if strings.HasSuffix(p.Name, slotStr) {
+						baseName = slotStr
+						deleteNow = i > dailyMixCount
+						break
+					}
+				}
+			case strings.HasSuffix(p.Name, config.Prefix+"Weekly Discovery"):
+				isSmart, baseName, deleteNow = true, config.Prefix + "Weekly Discovery", true
+			case strings.HasSuffix(p.Name, config.Prefix+"Daily Discovery"):
+				isSmart, baseName, deleteNow = true, config.Prefix + "Daily Discovery", !dailyDiscoveryEnabled
+			case strings.HasSuffix(p.Name, config.Prefix+"Forgotten Favorites"):
+				isSmart, baseName, deleteNow = true, config.Prefix + "Forgotten Favorites", !forgottenEnabled
+			case strings.HasSuffix(p.Name, config.Prefix+"On Repeat"):
+				isSmart, baseName, deleteNow = true, config.Prefix + "On Repeat", !onRepeatEnabled
+			case strings.HasSuffix(p.Name, config.Prefix+"Release Radar"):
+				isSmart, baseName, deleteNow = true, config.Prefix + "Release Radar", !releaseRadarEnabled
+			case strings.HasSuffix(p.Name, config.Prefix+"Your Loved Songs Mix"):
+				isSmart, baseName, deleteNow = true, config.Prefix + "Your Loved Songs Mix", !lovedMixEnabled
+			case strings.Contains(p.Name, config.Prefix+"Artist Radio "):
+				isSmart = true
+				for i := 1; i <= 20; i++ {
+					slotStr := fmt.Sprintf("Artist Radio %d:", i)
+					if strings.Contains(p.Name, slotStr) {
+						baseName = config.Prefix + fmt.Sprintf("Artist Radio %d", i)
+						deleteNow = !artistRadioEnabled || i > numArtistRadios
+						break
+					}
+				}
+			case strings.Contains(p.Name, config.Prefix+"Genre Radio "):
+				isSmart = true
+				for i := 1; i <= 10; i++ {
+					slotStr := fmt.Sprintf("Genre Radio %d:", i)
+					if strings.Contains(p.Name, slotStr) {
+						baseName = config.Prefix + fmt.Sprintf("Genre Radio %d", i)
+						deleteNow = !genreRadioEnabled || i > numGenreRadios
+						break
+					}
 				}
 			}
-		case strings.HasSuffix(p.Name, "Weekly Discovery"):
-			isSmart, baseName, deleteNow = true, "Weekly Discovery", true
-		case strings.HasSuffix(p.Name, "Daily Discovery"):
-			isSmart, baseName, deleteNow = true, "Daily Discovery", !dailyDiscoveryEnabled
-		case strings.HasSuffix(p.Name, "Forgotten Favorites"):
-			isSmart, baseName, deleteNow = true, "Forgotten Favorites", !forgottenEnabled
-		case strings.HasSuffix(p.Name, "On Repeat"):
-			isSmart, baseName, deleteNow = true, "On Repeat", !onRepeatEnabled
-		case strings.HasSuffix(p.Name, "Release Radar"):
-			isSmart, baseName, deleteNow = true, "Release Radar", !releaseRadarEnabled
-		case strings.HasSuffix(p.Name, "Your Loved Songs Mix"):
-			isSmart, baseName, deleteNow = true, "Your Loved Songs Mix", !lovedMixEnabled
-		case strings.Contains(p.Name, "Artist Radio "):
-			isSmart = true
-			for i := 1; i <= 20; i++ {
-				slotStr := fmt.Sprintf("Artist Radio %d:", i)
-				if strings.Contains(p.Name, slotStr) {
-					baseName = fmt.Sprintf("Artist Radio %d", i)
-					deleteNow = !artistRadioEnabled || i > numArtistRadios
-					break
-				}
-			}
-		case strings.Contains(p.Name, "Genre Radio "):
-			isSmart = true
-			for i := 1; i <= 10; i++ {
-				slotStr := fmt.Sprintf("Genre Radio %d:", i)
-				if strings.Contains(p.Name, slotStr) {
-					baseName = fmt.Sprintf("Genre Radio %d", i)
-					deleteNow = !genreRadioEnabled || i > numGenreRadios
-					break
-				}
-			}
-		}
 
-		if !isSmart || baseName == "" {
-			continue
-		}
-		if deleteNow {
-			deletePlaylist(p.ID)
-			continue
-		}
-		if _, ok := seenBaseNames[baseName]; ok {
-			deletePlaylist(p.ID)
-		} else {
-			seenBaseNames[baseName] = p.ID
+			if !isSmart || baseName == "" {
+				continue
+			}
+			if deleteNow {
+				deletePlaylist(username, p.ID)
+				continue
+			}
+			if _, ok := seenBaseNames[baseName]; ok {
+				deletePlaylist(username, p.ID)
+			} else {
+				seenBaseNames[baseName] = p.ID
+			}
 		}
 	}
 }
