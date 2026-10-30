@@ -383,15 +383,15 @@ func generateDailyDiscovery(username string, config *UserConfig, familiarSet map
 	createPlaylist(username, config, "Daily Discovery", smartSelect(songs, size))
 }
 
-func generateForgottenFavorites() {
-	if host.GetConfigString("enableForgottenFavorites", "true") != "true" {
+func generateForgottenFavorites(username string, config *UserConfig) {
+	if !config.EnableForgottenFavorites {
 		return
 	}
-	thresholdDays := host.GetConfigInt("forgottenThresholdDays", 180)
+	thresholdDays := config.ForgottenThresholdDays
 	cutoff := time.Now().AddDate(0, 0, -thresholdDays)
-	size := host.GetConfigInt("weeklySize", 25)
+	size := config.WeeklySize
 
-	resp, _ := host.CallSubsonic("getStarred2")
+	resp, _ := host.CallSubsonic("getStarred2", username)
 	var data struct {
 		SubsonicResponse struct {
 			Starred2 struct {
@@ -423,7 +423,7 @@ func generateForgottenFavorites() {
 	if len(candidates) == 0 {
 		return
 	}
-	createPlaylist("Forgotten Favorites", smartSelect(candidates, size))
+	createPlaylist(username, config, "Forgotten Favorites", smartSelect(candidates, size))
 }
 
 func filterByRecency(songs []Song, cutoff time.Time) []Song {
