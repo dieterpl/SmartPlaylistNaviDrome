@@ -95,6 +95,18 @@ type usersResp struct {
 
 var activeUsername string
 
+func GetUserSettings() string {
+	reqBytes, _ := json.Marshal(configReq{Key: "userSettings"})
+	mem := pdk.AllocateBytes(reqBytes)
+	resMem := pdk.FindMemory(config_get(mem.Offset()))
+	var res configStrResp
+	json.Unmarshal(resMem.ReadBytes(), &res)
+	if res.Exists {
+		return res.Value
+	}
+	return "[]"
+}
+
 func GetActiveUsername() string {
 	if activeUsername != "" {
 		return activeUsername
