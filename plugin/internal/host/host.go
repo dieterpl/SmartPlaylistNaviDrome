@@ -132,12 +132,16 @@ func GetActiveUsername() string {
 	return "admin"
 }
 
-func CallSubsonic(uri string) (string, error) {
+func CallSubsonic(uri string, username string) (string, error) {
+	if username == "" {
+		username = GetActiveUsername()
+	}
 	sep := "?"
 	if strings.Contains(uri, "?") {
 		sep = "&"
 	}
-	reqBytes, _ := json.Marshal(subsonicCallReq{Uri: fmt.Sprintf("%s%su=%s&f=json", uri, sep, GetActiveUsername())})
+	fullUri := fmt.Sprintf("%s%su=%s&f=json", uri, sep, username)
+	reqBytes, _ := json.Marshal(subsonicCallReq{Uri: fullUri})
 	mem := pdk.AllocateBytes(reqBytes)
 	resMem := pdk.FindMemory(subsonicapi_call(mem.Offset()))
 	var res subsonicCallResp
