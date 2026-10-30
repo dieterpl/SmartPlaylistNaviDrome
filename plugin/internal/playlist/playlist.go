@@ -114,8 +114,8 @@ func getSongs(respJSON string) []Song {
 	return songs
 }
 
-func getFrequentArtists(maxCount int) []FrequentArtist {
-	resp, _ := host.CallSubsonic("getAlbumList2?type=frequent&size=200")
+func getFrequentArtists(username string, maxCount int) []FrequentArtist {
+	resp, _ := host.CallSubsonic("getAlbumList2?type=frequent&size=200", username)
 	var data struct {
 		SubsonicResponse struct {
 			AlbumList2 struct {
