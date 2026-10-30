@@ -609,87 +609,6 @@ func generateLovedSongsMix(username string, config *UserConfig) {
 	createPlaylist(username, config, "Your Loved Songs Mix", smartSelect(songs, size))
 }
 
-func GenerateDailyMixes() {
-	pdk.Log(pdk.LogInfo, "Smart Playlist: Refreshing Daily Mixes...")
-	size := host.GetConfigInt("dailySize", 30)
-	poolSize := size * 5
-	count := host.GetConfigInt("dailyMixCount", 3)
-	if count < 1 {
-		count = 1
-	}
-	if count > 6 {
-		count = 6
-	}
-
-	type albumEntry struct {
-		Genre string `json:"genre"`
-	}
-	var albumResp struct {
-		SubsonicResponse struct {
-			AlbumList2 struct {
-				Album []albumEntry `json:"album"`
-			} `json:"albumList2"`
-		} `json:"subsonic-response"`
-	}
-
-	seen := make(map[string]bool)
-	var orderedGenres []string
-
-	resp, _ := host.CallSubsonic("getAlbumList2?type=recent&size=100")
-	json.Unmarshal([]byte(resp), &albumResp)
-	for _, a := range albumResp.SubsonicResponse.AlbumList2.Album {
-		if a.Genre != "" && !seen[a.Genre] {
-			seen[a.Genre] = true
-			orderedGenres = append(orderedGenres, a.Genre)
-		}
-	}
-
-	resp, _ = host.CallSubsonic("getAlbumList2?type=frequent&size=100")
-	json.Unmarshal([]byte(resp), &albumResp)
-	for _, a := range albumResp.SubsonicResponse.AlbumList2.Album {
-		if a.Genre != "" && !seen[a.Genre] {
-			seen[a.Genre] = true
-			orderedGenres = append(orderedGenres, a.Genre)
-		}
-	}
-
-	for i := 0; i < count; i++ {
-		mixNum := i + 1
-		var songs []Song
-		if i < len(orderedGenres) {
-			genre := orderedGenres[i]
-			resp, _ = host.CallSubsonic(fmt.Sprintf("getSongsByGenre?genre=%s&count=%d", url.QueryEscape(genre), poolSize))
-			songs = getSongs(resp)
-			if len(songs) < size {
-				resp, _ = host.CallSubsonic(fmt.Sprintf("getRandomSongs?size=%d", poolSize-len(songs)))
-				songs = append(songs, getSongs(resp)...)
-			}
-		} else {
-			resp, _ = host.CallSubsonic(fmt.Sprintf("getRandomSongs?size=%d", poolSize))
-			songs = getSongs(resp)
-		}
-		createPlaylist(fmt.Sprintf("Daily Mix %d", mixNum), smartSelect(songs, size))
-	}
-
-	generateOnRepeat()
-
-	// Pre-compute shared inputs only when at least one consumer is enabled.
-	dailyDiscEnabled := host.GetConfigString("enableDailyDiscovery", "true") == "true"
-	releaseRadarEnabled := host.GetConfigString("enableReleaseRadar", "true") == "true"
-	if dailyDiscEnabled || releaseRadarEnabled {
-		frequentArtists := getFrequentArtists(50)
-		sharedFamiliarSet := make(map[string]bool)
-		for _, a := range frequentArtists {
-			sharedFamiliarSet[a.ID] = true
-		}
-		sharedNewest := fetchNewestAlbums(100)
-		generateDailyDiscovery(sharedFamiliarSet, sharedNewest)
-		generateReleaseRadar(sharedFamiliarSet, sharedNewest)
-	}
-
-	host.KvSet("last_daily_update", time.Now().Format("2006-01-02"))
-}
-
 func generateArtistRadio(username string, config *UserConfig, slot int, artistName, artistId string, size int, allPlaylists []PlaylistInfo) {
 	pdk.Log(pdk.LogInfo, fmt.Sprintf("Smart Playlist: Generating Artist Radio %d for: %s", slot, artistName))
 	slotMarker := fmt.Sprintf("Artist Radio %d:", slot)
@@ -766,6 +685,93 @@ func generateGenreRadio(username string, config *UserConfig, slot int, genreName
 	}
 	fullName := config.Prefix + baseName
 	host.CallSubsonic(fmt.Sprintf("createPlaylist?name=%s&songId=%s", url.QueryEscape(fullName), buildSongParam(selected)), username)
+}
+
+func GenerateDailyMixes() {
+	pdk.Log(pdk.LogInfo, "Smart Playlist: Refreshing Daily Mixes...")
+	configs := getConfigs()
+	for i := range configs {
+		config := &configs[i]
+		username := config.Username
+		pdk.Log(pdk.LogInfo, fmt.Sprintf("Smart Playlist: [USER LOOP] Processing Daily Mixes for user: %s (Prefix: %s, Size: %d)", username, config.Prefix, config.DailySize))
+		size := config.DailySize
+		poolSize := size * 5
+		count := config.DailyMixCount
+		if count < 1 {
+			count = 1
+		}
+		if count > 6 {
+			count = 6
+		}
+
+		type albumEntry struct {
+			Genre string `json:"genre"`
+		}
+		var albumResp struct {
+			SubsonicResponse struct {
+				AlbumList2 struct {
+					Album []albumEntry `json:"album"`
+				} `json:"albumList2"`
+			} `json:"subsonic-response"`
+		}
+
+		seen := make(map[string]bool)
+		var orderedGenres []string
+
+		resp, _ := host.CallSubsonic("getAlbumList2?type=recent&size=100", username)
+		json.Unmarshal([]byte(resp), &albumResp)
+		for _, a := range albumResp.SubsonicResponse.AlbumList2.Album {
+			if a.Genre != "" && !seen[a.Genre] {
+				seen[a.Genre] = true
+				orderedGenres = append(orderedGenres, a.Genre)
+			}
+		}
+
+		resp, _ = host.CallSubsonic("getAlbumList2?type=frequent&size=100", username)
+		json.Unmarshal([]byte(resp), &albumResp)
+		for _, a := range albumResp.SubsonicResponse.AlbumList2.Album {
+			if a.Genre != "" && !seen[a.Genre] {
+				seen[a.Genre] = true
+				orderedGenres = append(orderedGenres, a.Genre)
+			}
+		}
+
+		for j := 0; j < count; j++ {
+			mixNum := j + 1
+			var songs []Song
+			if j < len(orderedGenres) {
+				genre := orderedGenres[j]
+				resp, _ = host.CallSubsonic(fmt.Sprintf("getSongsByGenre?genre=%s&count=%d", url.QueryEscape(genre), poolSize), username)
+				songs = getSongs(resp)
+				if len(songs) < size {
+					resp, _ = host.CallSubsonic(fmt.Sprintf("getRandomSongs?size=%d", poolSize-len(songs)), username)
+					songs = append(songs, getSongs(resp)...)
+				}
+			} else {
+				resp, _ = host.CallSubsonic(fmt.Sprintf("getRandomSongs?size=%d", poolSize), username)
+				songs = getSongs(resp)
+			}
+			createPlaylist(username, config, fmt.Sprintf("Daily Mix %d", mixNum), smartSelect(songs, size))
+		}
+
+		generateOnRepeat(username, config)
+
+		// Pre-compute shared inputs only when at least one consumer is enabled.
+		dailyDiscEnabled := config.EnableDailyDiscovery
+		releaseRadarEnabled := config.EnableReleaseRadar
+		if dailyDiscEnabled || releaseRadarEnabled {
+			frequentArtists := getFrequentArtists(username, 50)
+			sharedFamiliarSet := make(map[string]bool)
+			for _, a := range frequentArtists {
+				sharedFamiliarSet[a.ID] = true
+			}
+			sharedNewest := fetchNewestAlbums(username, 100)
+			generateDailyDiscovery(username, config, sharedFamiliarSet, sharedNewest)
+			generateReleaseRadar(username, config, sharedFamiliarSet, sharedNewest)
+		}
+	}
+
+	host.KvSet("last_daily_update", time.Now().Format("2006-01-02"))
 }
 
 func GenerateWeeklyMixes() {
