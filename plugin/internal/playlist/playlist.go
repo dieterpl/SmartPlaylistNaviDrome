@@ -173,9 +173,9 @@ func deletePlaylist(username string, id string) {
 	host.CallSubsonic(fmt.Sprintf("deletePlaylist?id=%s", id), username)
 }
 
-func findPlaylistIDs(baseName string) []string {
+func findPlaylistIDs(username string, baseName string) []string {
 	var ids []string
-	for _, p := range getAllPlaylists() {
+	for _, p := range getAllPlaylists(username) {
 		if strings.HasSuffix(p.Name, baseName) {
 			ids = append(ids, p.ID)
 		}
