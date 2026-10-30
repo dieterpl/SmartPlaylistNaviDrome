@@ -690,20 +690,20 @@ func GenerateDailyMixes() {
 	host.KvSet("last_daily_update", time.Now().Format("2006-01-02"))
 }
 
-func generateArtistRadio(slot int, artistName, artistId string, size int, allPlaylists []PlaylistInfo) {
+func generateArtistRadio(username string, config *UserConfig, slot int, artistName, artistId string, size int, allPlaylists []PlaylistInfo) {
 	pdk.Log(pdk.LogInfo, fmt.Sprintf("Smart Playlist: Generating Artist Radio %d for: %s", slot, artistName))
 	slotMarker := fmt.Sprintf("Artist Radio %d:", slot)
 	for _, p := range allPlaylists {
 		if strings.Contains(p.Name, slotMarker) {
-			deletePlaylist(p.ID)
+			deletePlaylist(username, p.ID)
 		}
 	}
 	baseName := fmt.Sprintf("Artist Radio %d: %s", slot, artistName)
 	poolSize := size * 5
-	resp, _ := host.CallSubsonic(fmt.Sprintf("getTopSongs?artist=%s&count=%d", url.QueryEscape(artistName), poolSize))
+	resp, _ := host.CallSubsonic(fmt.Sprintf("getTopSongs?artist=%s&count=%d", url.QueryEscape(artistName), poolSize), username)
 	songs := getSongs(resp)
 	if len(songs) < size && artistId != "" {
-		resp, _ = host.CallSubsonic(fmt.Sprintf("getArtist?id=%s", artistId))
+		resp, _ = host.CallSubsonic(fmt.Sprintf("getArtist?id=%s", artistId), username)
 		var artistData struct {
 			SubsonicResponse struct {
 				Artist struct {
@@ -715,7 +715,7 @@ func generateArtistRadio(slot int, artistName, artistId string, size int, allPla
 		}
 		json.Unmarshal([]byte(resp), &artistData)
 		for _, alb := range artistData.SubsonicResponse.Artist.Album {
-			aResp, _ := host.CallSubsonic(fmt.Sprintf("getAlbum?id=%s", alb.ID))
+			aResp, _ := host.CallSubsonic(fmt.Sprintf("getAlbum?id=%s", alb.ID), username)
 			var aData struct {
 				SubsonicResponse struct {
 					Album struct {
@@ -744,9 +744,9 @@ func generateArtistRadio(slot int, artistName, artistId string, size int, allPla
 	if len(selected) == 0 {
 		return
 	}
-	prefix := host.GetConfigString("prefix", "✨ ")
+	prefix := config.Prefix
 	fullName := prefix + baseName
-	host.CallSubsonic(fmt.Sprintf("createPlaylist?name=%s&songId=%s", url.QueryEscape(fullName), buildSongParam(selected)))
+	host.CallSubsonic(fmt.Sprintf("createPlaylist?name=%s&songId=%s", url.QueryEscape(fullName), buildSongParam(selected)), username)
 }
 
 func generateGenreRadio(slot int, genreName string, size int, allPlaylists []PlaylistInfo) {
