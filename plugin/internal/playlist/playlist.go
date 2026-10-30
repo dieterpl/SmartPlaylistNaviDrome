@@ -749,24 +749,23 @@ func generateArtistRadio(username string, config *UserConfig, slot int, artistNa
 	host.CallSubsonic(fmt.Sprintf("createPlaylist?name=%s&songId=%s", url.QueryEscape(fullName), buildSongParam(selected)), username)
 }
 
-func generateGenreRadio(slot int, genreName string, size int, allPlaylists []PlaylistInfo) {
+func generateGenreRadio(username string, config *UserConfig, slot int, genreName string, size int, allPlaylists []PlaylistInfo) {
 	pdk.Log(pdk.LogInfo, fmt.Sprintf("Smart Playlist: Generating Genre Radio %d for: %s", slot, genreName))
 	slotMarker := fmt.Sprintf("Genre Radio %d:", slot)
 	for _, p := range allPlaylists {
 		if strings.Contains(p.Name, slotMarker) {
-			deletePlaylist(p.ID)
+			deletePlaylist(username, p.ID)
 		}
 	}
 	baseName := fmt.Sprintf("Genre Radio %d: %s", slot, genreName)
 	poolSize := size * 5
-	resp, _ := host.CallSubsonic(fmt.Sprintf("getSongsByGenre?genre=%s&count=%d", url.QueryEscape(genreName), poolSize))
+	resp, _ := host.CallSubsonic(fmt.Sprintf("getSongsByGenre?genre=%s&count=%d", url.QueryEscape(genreName), poolSize), username)
 	selected := smartSelect(getSongs(resp), size)
 	if len(selected) == 0 {
 		return
 	}
-	prefix := host.GetConfigString("prefix", "✨ ")
-	fullName := prefix + baseName
-	host.CallSubsonic(fmt.Sprintf("createPlaylist?name=%s&songId=%s", url.QueryEscape(fullName), buildSongParam(selected)))
+	fullName := config.Prefix + baseName
+	host.CallSubsonic(fmt.Sprintf("createPlaylist?name=%s&songId=%s", url.QueryEscape(fullName), buildSongParam(selected)), username)
 }
 
 func GenerateWeeklyMixes() {
