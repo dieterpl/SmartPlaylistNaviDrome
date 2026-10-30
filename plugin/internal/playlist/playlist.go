@@ -176,7 +176,7 @@ func deletePlaylist(username string, id string) {
 func findPlaylistIDs(username string, baseName string) []string {
 	var ids []string
 	for _, p := range getAllPlaylists(username) {
-		if strings.HasSuffix(p.Name, baseName) {
+		if p.Owner == username && strings.HasSuffix(p.Name, baseName) {
 			ids = append(ids, p.ID)
 		}
 	}
