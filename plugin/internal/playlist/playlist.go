@@ -170,7 +170,7 @@ func getAllPlaylists(username string) []PlaylistInfo {
 }
 
 func deletePlaylist(username string, id string) {
-	host.CallSubsonic(fmt.Sprintf("deletePlaylist?id=%s", id))
+	host.CallSubsonic(fmt.Sprintf("deletePlaylist?id=%s", id), username)
 }
 
 func findPlaylistIDs(baseName string) []string {
