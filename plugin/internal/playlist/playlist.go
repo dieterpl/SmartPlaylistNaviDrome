@@ -183,25 +183,25 @@ func findPlaylistIDs(username string, baseName string) []string {
 	return ids
 }
 
-func createPlaylist(baseName string, ids []string) {
+func createPlaylist(username string, config *UserConfig, baseName string, ids []string) {
 	if len(ids) == 0 {
 		return
 	}
-	prefix := host.GetConfigString("prefix", "✨ ")
+	prefix := config.Prefix
 	fullName := prefix + baseName
 	songIds := buildSongParam(ids)
-	existingIds := findPlaylistIDs(baseName)
+	existingIds := findPlaylistIDs(username, fullName)
 	var uri string
 	if len(existingIds) > 0 {
 		mainId := existingIds[0]
 		for i := 1; i < len(existingIds); i++ {
-			deletePlaylist(existingIds[i])
+			deletePlaylist(username, existingIds[i])
 		}
 		uri = fmt.Sprintf("createPlaylist?playlistId=%s&name=%s&songId=%s", mainId, url.QueryEscape(fullName), songIds)
 	} else {
 		uri = fmt.Sprintf("createPlaylist?name=%s&songId=%s", url.QueryEscape(fullName), songIds)
 	}
-	host.CallSubsonic(uri)
+	host.CallSubsonic(uri, username)
 }
 
 func fetchNewestAlbums(username string, count int) []newestAlbumEntry {
