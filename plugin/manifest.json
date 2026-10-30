@@ -21,96 +21,112 @@
     "schema": {
       "type": "object",
       "properties": {
-        "prefix": {
-          "type": "string",
-          "title": "Playlist Prefix",
-          "default": "✨ "
-        },
-        "dailySize": {
-          "type": "integer",
-          "title": "Daily Mix Size",
-          "default": 30,
-          "minimum": 1
-        },
-        "weeklySize": {
-          "type": "integer",
-          "title": "Weekly Mix Size",
-          "default": 25,
-          "minimum": 1
-        },
-        "dailyMixCount": {
-          "type": "integer",
-          "title": "Number of Daily Mixes",
-          "default": 3,
-          "minimum": 1,
-          "maximum": 6
-        },
-        "numArtistRadios": {
-          "type": "integer",
-          "title": "Number of Artist Radios",
-          "default": 5,
-          "minimum": 1,
-          "maximum": 20
-        },
-        "artistRadioSize": {
-          "type": "integer",
-          "title": "Artist Radio Size",
-          "default": 30,
-          "minimum": 1
-        },
-        "numGenreRadios": {
-          "type": "integer",
-          "title": "Number of Genre Radios",
-          "default": 3,
-          "minimum": 1,
-          "maximum": 10
-        },
-        "enableDailyDiscovery": {
-          "type": "boolean",
-          "title": "Enable Daily Discovery",
-          "default": true
-        },
-        "enableArtistRadio": {
-          "type": "boolean",
-          "title": "Enable Artist Radios",
-          "default": true
-        },
-        "enableGenreRadio": {
-          "type": "boolean",
-          "title": "Enable Genre Radios",
-          "default": true
-        },
-        "enableOnRepeat": {
-          "type": "boolean",
-          "title": "Enable On Repeat Playlist",
-          "default": true
-        },
-        "onRepeatRecentDays": {
-          "type": "integer",
-          "title": "On Repeat: Recency Window (days)",
-          "default": 90,
-          "minimum": 1
-        },
-        "enableReleaseRadar": {
-          "type": "boolean",
-          "title": "Enable Release Radar",
-          "default": true
-        },
-        "enableLovedMix": {
-          "type": "boolean",
-          "title": "Enable Loved Songs Mix",
-          "default": true
-        },
-        "enableForgottenFavorites": {
-          "type": "boolean",
-          "title": "Enable Forgotten Favorites",
-          "default": true
-        },
-        "forgottenThresholdDays": {
-          "type": "integer",
-          "title": "Forgotten Favorites Threshold (days)",
-          "default": 180,
-          "minimum": 1
+        "userSettings": {
+          "type": "array",
+          "title": "User Settings",
+          "description": "Configure smart playlists for each user individually.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "username": {
+                "type": "string",
+                "title": "Username",
+                "description": "The Navidrome username of the target user."
+              },
+              "prefix": {
+                "type": "string",
+                "title": "Playlist Prefix",
+                "default": "✨ "
+              },
+              "dailySize": {
+                "type": "integer",
+                "title": "Daily Mix Size",
+                "default": 30,
+                "minimum": 1
+              },
+              "weeklySize": {
+                "type": "integer",
+                "title": "Weekly Mix Size",
+                "default": 25,
+                "minimum": 1
+              },
+              "dailyMixCount": {
+                "type": "integer",
+                "title": "Number of Daily Mixes",
+                "default": 3,
+                "minimum": 1,
+                "maximum": 6
+              },
+              "numArtistRadios": {
+                "type": "integer",
+                "title": "Number of Artist Radios",
+                "default": 5,
+                "minimum": 1,
+                "maximum": 20
+              },
+              "artistRadioSize": {
+                "type": "integer",
+                "title": "Artist Radio Size",
+                "default": 30,
+                "minimum": 1
+              },
+              "numGenreRadios": {
+                "type": "integer",
+                "title": "Number of Genre Radios",
+                "default": 3,
+                "minimum": 1,
+                "maximum": 10
+              },
+              "enableDailyDiscovery": {
+                "type": "boolean",
+                "title": "Enable Daily Discovery",
+                "default": true
+              },
+              "enableArtistRadio": {
+                "type": "boolean",
+                "title": "Enable Artist Radios",
+                "default": true
+              },
+              "enableGenreRadio": {
+                "type": "boolean",
+                "title": "Enable Genre Radios",
+                "default": true
+              },
+              "enableOnRepeat": {
+                "type": "boolean",
+                "title": "Enable On Repeat Playlist",
+                "default": true
+              },
+              "onRepeatRecentDays": {
+                "type": "integer",
+                "title": "On Repeat: Recency Window (days)",
+                "default": 90,
+                "minimum": 1
+              },
+              "enableReleaseRadar": {
+                "type": "boolean",
+                "title": "Enable Release Radar",
+                "default": true
+              },
+              "enableLovedMix": {
+                "type": "boolean",
+                "title": "Enable Loved Songs Mix",
+                "default": true
+              },
+              "enableForgottenFavorites": {
+                "type": "boolean",
+                "title": "Enable Forgotten Favorites",
+                "default": true
+              },
+              "forgottenThresholdDays": {
+                "type": "integer",
+                "title": "Forgotten Favorites Threshold (days)",
+                "default": 180,
+                "minimum": 1
+              }
+            },
+            "required": ["username"]
+          }
         }
       }
     }
