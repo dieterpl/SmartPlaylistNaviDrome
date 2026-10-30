@@ -839,25 +839,7 @@ func GenerateWeeklyMixes() {
 }
 
 func GetConfigHash() string {
-	prefix := host.GetConfigString("prefix", "✨ ")
-	ds := host.GetConfigInt("dailySize", 30)
-	ws := host.GetConfigInt("weeklySize", 25)
-	ars := host.GetConfigInt("artistRadioSize", 30)
-	dmc := host.GetConfigInt("dailyMixCount", 3)
-	nar := host.GetConfigInt("numArtistRadios", 5)
-	ngr := host.GetConfigInt("numGenreRadios", 3)
-	ftd := host.GetConfigInt("forgottenThresholdDays", 180)
-	ord := host.GetConfigInt("onRepeatRecentDays", 90)
-	onRepeat := host.GetConfigString("enableOnRepeat", "true")
-	releaseRadar := host.GetConfigString("enableReleaseRadar", "true")
-	lovedMix := host.GetConfigString("enableLovedMix", "true")
-	dailyDisc := host.GetConfigString("enableDailyDiscovery", "true")
-	artistRadio := host.GetConfigString("enableArtistRadio", "true")
-	genreRadio := host.GetConfigString("enableGenreRadio", "true")
-	forgotten := host.GetConfigString("enableForgottenFavorites", "true")
-	return fmt.Sprintf("%s-%d-%d-%d-%d-%d-%d-%d-%d-%s-%s-%s-%s-%s-%s-%s",
-		prefix, ds, ws, ars, dmc, nar, ngr, ftd, ord,
-		onRepeat, releaseRadar, lovedMix, dailyDisc, artistRadio, genreRadio, forgotten)
+	return host.GetUserSettings()
 }
 
 func GlobalCleanup() {
