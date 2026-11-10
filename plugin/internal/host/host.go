@@ -95,6 +95,18 @@ type usersResp struct {
 
 var activeUsername string
 
+func GetUserSettings() string {
+	reqBytes, _ := json.Marshal(configReq{Key: "userSettings"})
+	mem := pdk.AllocateBytes(reqBytes)
+	resMem := pdk.FindMemory(config_get(mem.Offset()))
+	var res configStrResp
+	json.Unmarshal(resMem.ReadBytes(), &res)
+	if res.Exists {
+		return res.Value
+	}
+	return "[]"
+}
+
 func GetActiveUsername() string {
 	if activeUsername != "" {
 		return activeUsername
@@ -120,12 +132,16 @@ func GetActiveUsername() string {
 	return "admin"
 }
 
-func CallSubsonic(uri string) (string, error) {
+func CallSubsonic(uri string, username string) (string, error) {
+	if username == "" {
+		username = GetActiveUsername()
+	}
 	sep := "?"
 	if strings.Contains(uri, "?") {
 		sep = "&"
 	}
-	reqBytes, _ := json.Marshal(subsonicCallReq{Uri: fmt.Sprintf("%s%su=%s&f=json", uri, sep, GetActiveUsername())})
+	fullUri := fmt.Sprintf("%s%su=%s&f=json", uri, sep, username)
+	reqBytes, _ := json.Marshal(subsonicCallReq{Uri: fullUri})
 	mem := pdk.AllocateBytes(reqBytes)
 	resMem := pdk.FindMemory(subsonicapi_call(mem.Offset()))
 	var res subsonicCallResp

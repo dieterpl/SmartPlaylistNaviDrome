@@ -41,8 +41,9 @@ type Song struct {
 }
 
 type PlaylistInfo struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Owner string `json:"owner"`
 }
 
 type FrequentArtist struct {
@@ -55,7 +56,36 @@ type newestAlbumEntry struct {
 	ArtistId string
 }
 
+type UserConfig struct {
+	Username               string `json:"username"`
+	Prefix                 string `json:"prefix"`
+	DailySize              int    `json:"dailySize"`
+	WeeklySize             int    `json:"weeklySize"`
+	DailyMixCount          int    `json:"dailyMixCount"`
+	NumArtistRadios        int    `json:"numArtistRadios"`
+	ArtistRadioSize        int    `json:"artistRadioSize"`
+	NumGenreRadios         int    `json:"numGenreRadios"`
+	EnableDailyDiscovery   bool   `json:"enableDailyDiscovery"`
+	EnableArtistRadio      bool   `json:"enableArtistRadio"`
+	EnableGenreRadio       bool   `json:"enableGenreRadio"`
+	EnableOnRepeat         bool   `json:"enableOnRepeat"`
+	OnRepeatRecentDays     int    `json:"onRepeatRecentDays"`
+	EnableReleaseRadar     bool   `json:"enableReleaseRadar"`
+	EnableLovedMix         bool   `json:"enableLovedMix"`
+	EnableForgottenFavorites bool   `json:"enableForgottenFavorites"`
+	ForgottenThresholdDays int    `json:"forgottenThresholdDays"`
+}
+
 // --- Subsonic helpers ---
+
+func getConfigs() []UserConfig {
+	resp := host.GetUserSettings()
+	var configs []UserConfig
+	if err := json.Unmarshal([]byte(resp), &configs); err != nil {
+		pdk.Log(pdk.LogError, fmt.Sprintf("Smart Playlist: Error unmarshaling user settings: %v", err))
+	}
+	return configs
+}
 
 func getSongs(respJSON string) []Song {
 	var data struct {
@@ -84,8 +114,8 @@ func getSongs(respJSON string) []Song {
 	return songs
 }
 
-func getFrequentArtists(maxCount int) []FrequentArtist {
-	resp, _ := host.CallSubsonic("getAlbumList2?type=frequent&size=200")
+func getFrequentArtists(username string, maxCount int) []FrequentArtist {
+	resp, _ := host.CallSubsonic("getAlbumList2?type=frequent&size=200", username)
 	var data struct {
 		SubsonicResponse struct {
 			AlbumList2 struct {
@@ -112,13 +142,13 @@ func getFrequentArtists(maxCount int) []FrequentArtist {
 	return artists
 }
 
-func getTopSongsForArtists(artists []FrequentArtist, countPerArtist int) []Song {
+func getTopSongsForArtists(username string, artists []FrequentArtist, countPerArtist int) []Song {
 	var all []Song
 	for _, artist := range artists {
-		resp, _ := host.CallSubsonic(fmt.Sprintf("getTopSongs?artist=%s&count=%d", url.QueryEscape(artist.Name), countPerArtist))
+		resp, _ := host.CallSubsonic(fmt.Sprintf("getTopSongs?artist=%s&count=%d", url.QueryEscape(artist.Name), countPerArtist), username)
 		songs := getSongs(resp)
 		if len(songs) == 0 {
-			resp, _ = host.CallSubsonic(fmt.Sprintf("search3?query=%s&songCount=%d", url.QueryEscape(artist.Name), countPerArtist))
+			resp, _ = host.CallSubsonic(fmt.Sprintf("search3?query=%s&songCount=%d", url.QueryEscape(artist.Name), countPerArtist), username)
 			songs = getSongs(resp)
 		}
 		all = append(all, songs...)
@@ -126,8 +156,8 @@ func getTopSongsForArtists(artists []FrequentArtist, countPerArtist int) []Song 
 	return all
 }
 
-func getAllPlaylists() []PlaylistInfo {
-	resp, _ := host.CallSubsonic("getPlaylists")
+func getAllPlaylists(username string) []PlaylistInfo {
+	resp, _ := host.CallSubsonic("getPlaylists", username)
 	var data struct {
 		SubsonicResponse struct {
 			Playlists struct {
@@ -139,42 +169,42 @@ func getAllPlaylists() []PlaylistInfo {
 	return data.SubsonicResponse.Playlists.Playlist
 }
 
-func deletePlaylist(id string) {
-	host.CallSubsonic(fmt.Sprintf("deletePlaylist?id=%s", id))
+func deletePlaylist(username string, id string) {
+	host.CallSubsonic(fmt.Sprintf("deletePlaylist?id=%s", id), username)
 }
 
-func findPlaylistIDs(baseName string) []string {
+func findPlaylistIDs(username string, baseName string) []string {
 	var ids []string
-	for _, p := range getAllPlaylists() {
-		if strings.HasSuffix(p.Name, baseName) {
+	for _, p := range getAllPlaylists(username) {
+		if p.Owner == username && strings.HasSuffix(p.Name, baseName) {
 			ids = append(ids, p.ID)
 		}
 	}
 	return ids
 }
 
-func createPlaylist(baseName string, ids []string) {
+func createPlaylist(username string, config *UserConfig, baseName string, ids []string) {
 	if len(ids) == 0 {
 		return
 	}
-	prefix := host.GetConfigString("prefix", "✨ ")
+	prefix := config.Prefix
 	fullName := prefix + baseName
 	songIds := buildSongParam(ids)
-	existingIds := findPlaylistIDs(baseName)
+	existingIds := findPlaylistIDs(username, fullName)
 	var uri string
 	if len(existingIds) > 0 {
 		mainId := existingIds[0]
 		for i := 1; i < len(existingIds); i++ {
-			deletePlaylist(existingIds[i])
+			deletePlaylist(username, existingIds[i])
 		}
 		uri = fmt.Sprintf("createPlaylist?playlistId=%s&name=%s&songId=%s", mainId, url.QueryEscape(fullName), songIds)
 	} else {
 		uri = fmt.Sprintf("createPlaylist?name=%s&songId=%s", url.QueryEscape(fullName), songIds)
 	}
-	host.CallSubsonic(uri)
+	host.CallSubsonic(uri, username)
 }
 
-func fetchNewestAlbums(count int) []newestAlbumEntry {
+func fetchNewestAlbums(username string, count int) []newestAlbumEntry {
 	type entry struct {
 		ID       string `json:"id"`
 		ArtistId string `json:"artistId"`
@@ -184,7 +214,7 @@ func fetchNewestAlbums(count int) []newestAlbumEntry {
 			AlbumList2 struct{ Album []entry `json:"album"` } `json:"albumList2"`
 		} `json:"subsonic-response"`
 	}
-	resp, _ := host.CallSubsonic(fmt.Sprintf("getAlbumList2?type=newest&size=%d", count))
+	resp, _ := host.CallSubsonic(fmt.Sprintf("getAlbumList2?type=newest&size=%d", count), username)
 	json.Unmarshal([]byte(resp), &data)
 	var result []newestAlbumEntry
 	for _, a := range data.SubsonicResponse.AlbumList2.Album {
@@ -281,11 +311,11 @@ func smartSelect(songs []Song, targetSize int) []string {
 
 // --- Generators ---
 
-func generateDailyDiscovery(familiarSet map[string]bool, newest []newestAlbumEntry) {
-	if host.GetConfigString("enableDailyDiscovery", "true") != "true" {
+func generateDailyDiscovery(username string, config *UserConfig, familiarSet map[string]bool, newest []newestAlbumEntry) {
+	if !config.EnableDailyDiscovery {
 		return
 	}
-	size := host.GetConfigInt("dailySize", 30)
+	size := config.DailySize
 	poolTarget := size * 5
 	perAlbumCap := size / 8
 	if perAlbumCap < 2 {
@@ -303,7 +333,7 @@ func generateDailyDiscovery(familiarSet map[string]bool, newest []newestAlbumEnt
 	}
 
 	fetchAlbumSongs := func(albumID string) []Song {
-		aResp, _ := host.CallSubsonic(fmt.Sprintf("getAlbum?id=%s", albumID))
+		aResp, _ := host.CallSubsonic(fmt.Sprintf("getAlbum?id=%s", albumID), username)
 		var aData struct {
 			SubsonicResponse struct {
 				Album struct{ Song []Song `json:"song"` } `json:"album"`
@@ -346,22 +376,22 @@ func generateDailyDiscovery(familiarSet map[string]bool, newest []newestAlbumEnt
 
 	// Pad with random songs to reach pool target
 	if len(songs) < poolTarget {
-		padResp, _ := host.CallSubsonic(fmt.Sprintf("getRandomSongs?size=%d", poolTarget-len(songs)))
+		padResp, _ := host.CallSubsonic(fmt.Sprintf("getRandomSongs?size=%d", poolTarget-len(songs)), username)
 		songs = append(songs, getSongs(padResp)...)
 	}
 
-	createPlaylist("Daily Discovery", smartSelect(songs, size))
+	createPlaylist(username, config, "Daily Discovery", smartSelect(songs, size))
 }
 
-func generateForgottenFavorites() {
-	if host.GetConfigString("enableForgottenFavorites", "true") != "true" {
+func generateForgottenFavorites(username string, config *UserConfig) {
+	if !config.EnableForgottenFavorites {
 		return
 	}
-	thresholdDays := host.GetConfigInt("forgottenThresholdDays", 180)
+	thresholdDays := config.ForgottenThresholdDays
 	cutoff := time.Now().AddDate(0, 0, -thresholdDays)
-	size := host.GetConfigInt("weeklySize", 25)
+	size := config.WeeklySize
 
-	resp, _ := host.CallSubsonic("getStarred2")
+	resp, _ := host.CallSubsonic("getStarred2", username)
 	var data struct {
 		SubsonicResponse struct {
 			Starred2 struct {
@@ -393,7 +423,7 @@ func generateForgottenFavorites() {
 	if len(candidates) == 0 {
 		return
 	}
-	createPlaylist("Forgotten Favorites", smartSelect(candidates, size))
+	createPlaylist(username, config, "Forgotten Favorites", smartSelect(candidates, size))
 }
 
 func filterByRecency(songs []Song, cutoff time.Time) []Song {
@@ -413,15 +443,15 @@ func filterByRecency(songs []Song, cutoff time.Time) []Song {
 	return out
 }
 
-func generateOnRepeat() {
-	if host.GetConfigString("enableOnRepeat", "true") != "true" {
+func generateOnRepeat(username string, config *UserConfig) {
+	if !config.EnableOnRepeat {
 		return
 	}
-	size := host.GetConfigInt("dailySize", 30)
-	recentDays := host.GetConfigInt("onRepeatRecentDays", 90)
+	size := config.DailySize
+	recentDays := config.OnRepeatRecentDays
 	cutoff := time.Now().AddDate(0, 0, -recentDays)
 
-	artists := getFrequentArtists(5)
+	artists := getFrequentArtists(username, 5)
 	if len(artists) == 0 {
 		return
 	}
@@ -429,11 +459,11 @@ func generateOnRepeat() {
 	if countPerArtist < 10 {
 		countPerArtist = 10
 	}
-	songs := filterByRecency(getTopSongsForArtists(artists, countPerArtist), cutoff)
+	songs := filterByRecency(getTopSongsForArtists(username, artists, countPerArtist), cutoff)
 
 	// Pad with songs from recently-played albums (still filtered by recency).
 	if len(songs) < size {
-		resp, _ := host.CallSubsonic(fmt.Sprintf("getAlbumList2?type=recent&size=%d", size))
+		resp, _ := host.CallSubsonic(fmt.Sprintf("getAlbumList2?type=recent&size=%d", size), username)
 		var recentData struct {
 			SubsonicResponse struct {
 				AlbumList2 struct {
@@ -449,7 +479,7 @@ func generateOnRepeat() {
 			seen[s.ID] = true
 		}
 		for _, alb := range recentData.SubsonicResponse.AlbumList2.Album {
-			aResp, _ := host.CallSubsonic(fmt.Sprintf("getAlbum?id=%s", alb.ID))
+			aResp, _ := host.CallSubsonic(fmt.Sprintf("getAlbum?id=%s", alb.ID), username)
 			var aData struct {
 				SubsonicResponse struct {
 					Album struct {
@@ -469,14 +499,14 @@ func generateOnRepeat() {
 			}
 		}
 	}
-	createPlaylist("On Repeat", smartSelect(songs, size))
+	createPlaylist(username, config, "On Repeat", smartSelect(songs, size))
 }
 
-func generateReleaseRadar(familiarSet map[string]bool, newest []newestAlbumEntry) {
-	if host.GetConfigString("enableReleaseRadar", "true") != "true" {
+func generateReleaseRadar(username string, config *UserConfig, familiarSet map[string]bool, newest []newestAlbumEntry) {
+	if !config.EnableReleaseRadar {
 		return
 	}
-	size := host.GetConfigInt("weeklySize", 25)
+	size := config.WeeklySize
 
 	// Albums the user has already played — used to promote new additions they started exploring
 	type albumIDEntry struct {
@@ -487,7 +517,7 @@ func generateReleaseRadar(familiarSet map[string]bool, newest []newestAlbumEntry
 			AlbumList2 struct{ Album []albumIDEntry `json:"album"` } `json:"albumList2"`
 		} `json:"subsonic-response"`
 	}
-	resp, _ := host.CallSubsonic("getAlbumList2?type=recent&size=50")
+	resp, _ := host.CallSubsonic("getAlbumList2?type=recent&size=50", username)
 	json.Unmarshal([]byte(resp), &recentData)
 	recentlyPlayedSet := make(map[string]bool)
 	for _, a := range recentData.SubsonicResponse.AlbumList2.Album {
@@ -536,7 +566,7 @@ func generateReleaseRadar(familiarSet map[string]bool, newest []newestAlbumEntry
 		if len(songs) >= poolTarget {
 			break
 		}
-		aResp, _ := host.CallSubsonic(fmt.Sprintf("getAlbum?id=%s", albumID))
+		aResp, _ := host.CallSubsonic(fmt.Sprintf("getAlbum?id=%s", albumID), username)
 		var aData struct {
 			SubsonicResponse struct {
 				Album struct{ Song []Song `json:"song"` } `json:"album"`
@@ -551,18 +581,18 @@ func generateReleaseRadar(familiarSet map[string]bool, newest []newestAlbumEntry
 		songs = append(songs, albumSongs...)
 	}
 	if len(songs) < size {
-		resp, _ = host.CallSubsonic(fmt.Sprintf("getRandomSongs?size=%d", size*5))
+		resp, _ = host.CallSubsonic(fmt.Sprintf("getRandomSongs?size=%d", size*5), username)
 		songs = append(songs, getSongs(resp)...)
 	}
-	createPlaylist("Release Radar", smartSelect(songs, size))
+	createPlaylist(username, config, "Release Radar", smartSelect(songs, size))
 }
 
-func generateLovedSongsMix() {
-	if host.GetConfigString("enableLovedMix", "true") != "true" {
+func generateLovedSongsMix(username string, config *UserConfig) {
+	if !config.EnableLovedMix {
 		return
 	}
-	size := host.GetConfigInt("weeklySize", 25)
-	resp, _ := host.CallSubsonic("getStarred2")
+	size := config.WeeklySize
+	resp, _ := host.CallSubsonic("getStarred2", username)
 	var data struct {
 		SubsonicResponse struct {
 			Starred2 struct {
@@ -576,104 +606,23 @@ func generateLovedSongsMix() {
 		return
 	}
 	rand.Shuffle(len(songs), func(i, j int) { songs[i], songs[j] = songs[j], songs[i] })
-	createPlaylist("Your Loved Songs Mix", smartSelect(songs, size))
+	createPlaylist(username, config, "Your Loved Songs Mix", smartSelect(songs, size))
 }
 
-func GenerateDailyMixes() {
-	pdk.Log(pdk.LogInfo, "Smart Playlist: Refreshing Daily Mixes...")
-	size := host.GetConfigInt("dailySize", 30)
-	poolSize := size * 5
-	count := host.GetConfigInt("dailyMixCount", 3)
-	if count < 1 {
-		count = 1
-	}
-	if count > 6 {
-		count = 6
-	}
-
-	type albumEntry struct {
-		Genre string `json:"genre"`
-	}
-	var albumResp struct {
-		SubsonicResponse struct {
-			AlbumList2 struct {
-				Album []albumEntry `json:"album"`
-			} `json:"albumList2"`
-		} `json:"subsonic-response"`
-	}
-
-	seen := make(map[string]bool)
-	var orderedGenres []string
-
-	resp, _ := host.CallSubsonic("getAlbumList2?type=recent&size=100")
-	json.Unmarshal([]byte(resp), &albumResp)
-	for _, a := range albumResp.SubsonicResponse.AlbumList2.Album {
-		if a.Genre != "" && !seen[a.Genre] {
-			seen[a.Genre] = true
-			orderedGenres = append(orderedGenres, a.Genre)
-		}
-	}
-
-	resp, _ = host.CallSubsonic("getAlbumList2?type=frequent&size=100")
-	json.Unmarshal([]byte(resp), &albumResp)
-	for _, a := range albumResp.SubsonicResponse.AlbumList2.Album {
-		if a.Genre != "" && !seen[a.Genre] {
-			seen[a.Genre] = true
-			orderedGenres = append(orderedGenres, a.Genre)
-		}
-	}
-
-	for i := 0; i < count; i++ {
-		mixNum := i + 1
-		var songs []Song
-		if i < len(orderedGenres) {
-			genre := orderedGenres[i]
-			resp, _ = host.CallSubsonic(fmt.Sprintf("getSongsByGenre?genre=%s&count=%d", url.QueryEscape(genre), poolSize))
-			songs = getSongs(resp)
-			if len(songs) < size {
-				resp, _ = host.CallSubsonic(fmt.Sprintf("getRandomSongs?size=%d", poolSize-len(songs)))
-				songs = append(songs, getSongs(resp)...)
-			}
-		} else {
-			resp, _ = host.CallSubsonic(fmt.Sprintf("getRandomSongs?size=%d", poolSize))
-			songs = getSongs(resp)
-		}
-		createPlaylist(fmt.Sprintf("Daily Mix %d", mixNum), smartSelect(songs, size))
-	}
-
-	generateOnRepeat()
-
-	// Pre-compute shared inputs only when at least one consumer is enabled.
-	dailyDiscEnabled := host.GetConfigString("enableDailyDiscovery", "true") == "true"
-	releaseRadarEnabled := host.GetConfigString("enableReleaseRadar", "true") == "true"
-	if dailyDiscEnabled || releaseRadarEnabled {
-		frequentArtists := getFrequentArtists(50)
-		sharedFamiliarSet := make(map[string]bool)
-		for _, a := range frequentArtists {
-			sharedFamiliarSet[a.ID] = true
-		}
-		sharedNewest := fetchNewestAlbums(100)
-		generateDailyDiscovery(sharedFamiliarSet, sharedNewest)
-		generateReleaseRadar(sharedFamiliarSet, sharedNewest)
-	}
-
-	host.KvSet("last_daily_update", time.Now().Format("2006-01-02"))
-}
-
-func generateArtistRadio(slot int, artistName, artistId string, size int, allPlaylists []PlaylistInfo) {
+func generateArtistRadio(username string, config *UserConfig, slot int, artistName, artistId string, size int, allPlaylists []PlaylistInfo) {
 	pdk.Log(pdk.LogInfo, fmt.Sprintf("Smart Playlist: Generating Artist Radio %d for: %s", slot, artistName))
 	slotMarker := fmt.Sprintf("Artist Radio %d:", slot)
 	for _, p := range allPlaylists {
 		if strings.Contains(p.Name, slotMarker) {
-			deletePlaylist(p.ID)
+			deletePlaylist(username, p.ID)
 		}
 	}
 	baseName := fmt.Sprintf("Artist Radio %d: %s", slot, artistName)
 	poolSize := size * 5
-	resp, _ := host.CallSubsonic(fmt.Sprintf("getTopSongs?artist=%s&count=%d", url.QueryEscape(artistName), poolSize))
+	resp, _ := host.CallSubsonic(fmt.Sprintf("getTopSongs?artist=%s&count=%d", url.QueryEscape(artistName), poolSize), username)
 	songs := getSongs(resp)
 	if len(songs) < size && artistId != "" {
-		resp, _ = host.CallSubsonic(fmt.Sprintf("getArtist?id=%s", artistId))
+		resp, _ = host.CallSubsonic(fmt.Sprintf("getArtist?id=%s", artistId), username)
 		var artistData struct {
 			SubsonicResponse struct {
 				Artist struct {
@@ -685,7 +634,7 @@ func generateArtistRadio(slot int, artistName, artistId string, size int, allPla
 		}
 		json.Unmarshal([]byte(resp), &artistData)
 		for _, alb := range artistData.SubsonicResponse.Artist.Album {
-			aResp, _ := host.CallSubsonic(fmt.Sprintf("getAlbum?id=%s", alb.ID))
+			aResp, _ := host.CallSubsonic(fmt.Sprintf("getAlbum?id=%s", alb.ID), username)
 			var aData struct {
 				SubsonicResponse struct {
 					Album struct {
@@ -714,82 +663,174 @@ func generateArtistRadio(slot int, artistName, artistId string, size int, allPla
 	if len(selected) == 0 {
 		return
 	}
-	prefix := host.GetConfigString("prefix", "✨ ")
+	prefix := config.Prefix
 	fullName := prefix + baseName
-	host.CallSubsonic(fmt.Sprintf("createPlaylist?name=%s&songId=%s", url.QueryEscape(fullName), buildSongParam(selected)))
+	host.CallSubsonic(fmt.Sprintf("createPlaylist?name=%s&songId=%s", url.QueryEscape(fullName), buildSongParam(selected)), username)
 }
 
-func generateGenreRadio(slot int, genreName string, size int, allPlaylists []PlaylistInfo) {
+func generateGenreRadio(username string, config *UserConfig, slot int, genreName string, size int, allPlaylists []PlaylistInfo) {
 	pdk.Log(pdk.LogInfo, fmt.Sprintf("Smart Playlist: Generating Genre Radio %d for: %s", slot, genreName))
 	slotMarker := fmt.Sprintf("Genre Radio %d:", slot)
 	for _, p := range allPlaylists {
 		if strings.Contains(p.Name, slotMarker) {
-			deletePlaylist(p.ID)
+			deletePlaylist(username, p.ID)
 		}
 	}
 	baseName := fmt.Sprintf("Genre Radio %d: %s", slot, genreName)
 	poolSize := size * 5
-	resp, _ := host.CallSubsonic(fmt.Sprintf("getSongsByGenre?genre=%s&count=%d", url.QueryEscape(genreName), poolSize))
+	resp, _ := host.CallSubsonic(fmt.Sprintf("getSongsByGenre?genre=%s&count=%d", url.QueryEscape(genreName), poolSize), username)
 	selected := smartSelect(getSongs(resp), size)
 	if len(selected) == 0 {
 		return
 	}
-	prefix := host.GetConfigString("prefix", "✨ ")
-	fullName := prefix + baseName
-	host.CallSubsonic(fmt.Sprintf("createPlaylist?name=%s&songId=%s", url.QueryEscape(fullName), buildSongParam(selected)))
+	fullName := config.Prefix + baseName
+	host.CallSubsonic(fmt.Sprintf("createPlaylist?name=%s&songId=%s", url.QueryEscape(fullName), buildSongParam(selected)), username)
+}
+
+func GenerateDailyMixes() {
+	pdk.Log(pdk.LogInfo, "Smart Playlist: Refreshing Daily Mixes...")
+	configs := getConfigs()
+	for i := range configs {
+		config := &configs[i]
+		username := config.Username
+		pdk.Log(pdk.LogInfo, fmt.Sprintf("Smart Playlist: [USER LOOP] Processing Daily Mixes for user: %s (Prefix: %s, Size: %d)", username, config.Prefix, config.DailySize))
+		size := config.DailySize
+		poolSize := size * 5
+		count := config.DailyMixCount
+		if count < 1 {
+			count = 1
+		}
+		if count > 6 {
+			count = 6
+		}
+
+		type albumEntry struct {
+			Genre string `json:"genre"`
+		}
+		var albumResp struct {
+			SubsonicResponse struct {
+				AlbumList2 struct {
+					Album []albumEntry `json:"album"`
+				} `json:"albumList2"`
+			} `json:"subsonic-response"`
+		}
+
+		seen := make(map[string]bool)
+		var orderedGenres []string
+
+		resp, _ := host.CallSubsonic("getAlbumList2?type=recent&size=100", username)
+		json.Unmarshal([]byte(resp), &albumResp)
+		for _, a := range albumResp.SubsonicResponse.AlbumList2.Album {
+			if a.Genre != "" && !seen[a.Genre] {
+				seen[a.Genre] = true
+				orderedGenres = append(orderedGenres, a.Genre)
+			}
+		}
+
+		resp, _ = host.CallSubsonic("getAlbumList2?type=frequent&size=100", username)
+		json.Unmarshal([]byte(resp), &albumResp)
+		for _, a := range albumResp.SubsonicResponse.AlbumList2.Album {
+			if a.Genre != "" && !seen[a.Genre] {
+				seen[a.Genre] = true
+				orderedGenres = append(orderedGenres, a.Genre)
+			}
+		}
+
+		for j := 0; j < count; j++ {
+			mixNum := j + 1
+			var songs []Song
+			if j < len(orderedGenres) {
+				genre := orderedGenres[j]
+				resp, _ = host.CallSubsonic(fmt.Sprintf("getSongsByGenre?genre=%s&count=%d", url.QueryEscape(genre), poolSize), username)
+				songs = getSongs(resp)
+				if len(songs) < size {
+					resp, _ = host.CallSubsonic(fmt.Sprintf("getRandomSongs?size=%d", poolSize-len(songs)), username)
+					songs = append(songs, getSongs(resp)...)
+				}
+			} else {
+				resp, _ = host.CallSubsonic(fmt.Sprintf("getRandomSongs?size=%d", poolSize), username)
+				songs = getSongs(resp)
+			}
+			createPlaylist(username, config, fmt.Sprintf("Daily Mix %d", mixNum), smartSelect(songs, size))
+		}
+
+		generateOnRepeat(username, config)
+
+		// Pre-compute shared inputs only when at least one consumer is enabled.
+		dailyDiscEnabled := config.EnableDailyDiscovery
+		releaseRadarEnabled := config.EnableReleaseRadar
+		if dailyDiscEnabled || releaseRadarEnabled {
+			frequentArtists := getFrequentArtists(username, 50)
+			sharedFamiliarSet := make(map[string]bool)
+			for _, a := range frequentArtists {
+				sharedFamiliarSet[a.ID] = true
+			}
+			sharedNewest := fetchNewestAlbums(username, 100)
+			generateDailyDiscovery(username, config, sharedFamiliarSet, sharedNewest)
+			generateReleaseRadar(username, config, sharedFamiliarSet, sharedNewest)
+		}
+	}
+
+	host.KvSet("last_daily_update", time.Now().Format("2006-01-02"))
 }
 
 func GenerateWeeklyMixes() {
 	pdk.Log(pdk.LogInfo, "Smart Playlist: Refreshing Weekly Mixes...")
-	size := host.GetConfigInt("weeklySize", 25)
-	artistRadioSize := host.GetConfigInt("artistRadioSize", 30)
+	configs := getConfigs()
+	for i := range configs {
+		config := &configs[i]
+		username := config.Username
+		pdk.Log(pdk.LogInfo, fmt.Sprintf("Smart Playlist: [USER LOOP] Refreshing Weekly Mixes for user: %s (Prefix: %s, Size: %d)", username, config.Prefix, config.WeeklySize))
+		size := config.WeeklySize
+		artistRadioSize := config.ArtistRadioSize
 
-	generateLovedSongsMix()
-	generateForgottenFavorites()
+		generateLovedSongsMix(username, config)
+		generateForgottenFavorites(username, config)
 
-	// Fetch playlist list once; pass it into radio generators to avoid N+1 getPlaylists calls.
-	radioPlaylists := getAllPlaylists()
+		// Fetch playlist list once; pass it into radio generators to avoid N+1 getPlaylists calls.
+		radioPlaylists := getAllPlaylists(username)
 
-	if host.GetConfigString("enableArtistRadio", "true") == "true" {
-		numArtistRadios := host.GetConfigInt("numArtistRadios", 5)
-		if numArtistRadios < 1 {
-			numArtistRadios = 1
+		if config.EnableArtistRadio {
+			numArtistRadios := config.NumArtistRadios
+			if numArtistRadios < 1 {
+				numArtistRadios = 1
+			}
+			if numArtistRadios > 20 {
+				numArtistRadios = 20
+			}
+			artists := getFrequentArtists(username, numArtistRadios)
+			for j, artist := range artists {
+				generateArtistRadio(username, config, j+1, artist.Name, artist.ID, artistRadioSize, radioPlaylists)
+			}
 		}
-		if numArtistRadios > 20 {
-			numArtistRadios = 20
-		}
-		artists := getFrequentArtists(numArtistRadios)
-		for i, artist := range artists {
-			generateArtistRadio(i+1, artist.Name, artist.ID, artistRadioSize, radioPlaylists)
-		}
-	}
 
-	if host.GetConfigString("enableGenreRadio", "true") == "true" {
-		numGenreRadios := host.GetConfigInt("numGenreRadios", 3)
-		if numGenreRadios < 1 {
-			numGenreRadios = 1
-		}
-		if numGenreRadios > 10 {
-			numGenreRadios = 10
-		}
-		resp, _ := host.CallSubsonic("getGenres")
-		var genreData struct {
-			SubsonicResponse struct {
-				Genres struct {
-					Genre []struct {
-						Value     string `json:"value"`
-						SongCount int    `json:"songCount"`
-					} `json:"genre"`
-				} `json:"genres"`
-			} `json:"subsonic-response"`
-		}
-		json.Unmarshal([]byte(resp), &genreData)
-		genres := genreData.SubsonicResponse.Genres.Genre
-		sort.Slice(genres, func(i, j int) bool {
-			return genres[i].SongCount > genres[j].SongCount
-		})
-		for i := 0; i < numGenreRadios && i < len(genres); i++ {
-			generateGenreRadio(i+1, genres[i].Value, size, radioPlaylists)
+		if config.EnableGenreRadio {
+			numGenreRadios := config.NumGenreRadios
+			if numGenreRadios < 1 {
+				numGenreRadios = 1
+			}
+			if numGenreRadios > 10 {
+				numGenreRadios = 10
+			}
+			resp, _ := host.CallSubsonic("getGenres", username)
+			var genreData struct {
+				SubsonicResponse struct {
+					Genres struct {
+						Genre []struct {
+							Value     string `json:"value"`
+							SongCount int    `json:"songCount"`
+						} `json:"genre"`
+					} `json:"genres"`
+				} `json:"subsonic-response"`
+			}
+			json.Unmarshal([]byte(resp), &genreData)
+			genres := genreData.SubsonicResponse.Genres.Genre
+			sort.Slice(genres, func(i, j int) bool {
+				return genres[i].SongCount > genres[j].SongCount
+			})
+			for j := 0; j < numGenreRadios && j < len(genres); j++ {
+				generateGenreRadio(username, config, j+1, genres[j].Value, size, radioPlaylists)
+			}
 		}
 	}
 
@@ -798,123 +839,112 @@ func GenerateWeeklyMixes() {
 }
 
 func GetConfigHash() string {
-	prefix := host.GetConfigString("prefix", "✨ ")
-	ds := host.GetConfigInt("dailySize", 30)
-	ws := host.GetConfigInt("weeklySize", 25)
-	ars := host.GetConfigInt("artistRadioSize", 30)
-	dmc := host.GetConfigInt("dailyMixCount", 3)
-	nar := host.GetConfigInt("numArtistRadios", 5)
-	ngr := host.GetConfigInt("numGenreRadios", 3)
-	ftd := host.GetConfigInt("forgottenThresholdDays", 180)
-	ord := host.GetConfigInt("onRepeatRecentDays", 90)
-	onRepeat := host.GetConfigString("enableOnRepeat", "true")
-	releaseRadar := host.GetConfigString("enableReleaseRadar", "true")
-	lovedMix := host.GetConfigString("enableLovedMix", "true")
-	dailyDisc := host.GetConfigString("enableDailyDiscovery", "true")
-	artistRadio := host.GetConfigString("enableArtistRadio", "true")
-	genreRadio := host.GetConfigString("enableGenreRadio", "true")
-	forgotten := host.GetConfigString("enableForgottenFavorites", "true")
-	return fmt.Sprintf("%s-%d-%d-%d-%d-%d-%d-%d-%d-%s-%s-%s-%s-%s-%s-%s",
-		prefix, ds, ws, ars, dmc, nar, ngr, ftd, ord,
-		onRepeat, releaseRadar, lovedMix, dailyDisc, artistRadio, genreRadio, forgotten)
+	return host.GetUserSettings()
 }
 
 func GlobalCleanup() {
 	pdk.Log(pdk.LogInfo, "Smart Playlist: Performing global cleanup...")
 
-	dailyMixCount := host.GetConfigInt("dailyMixCount", 3)
-	if dailyMixCount < 1 {
-		dailyMixCount = 1
-	}
-	if dailyMixCount > 6 {
-		dailyMixCount = 6
-	}
-	numArtistRadios := host.GetConfigInt("numArtistRadios", 5)
-	if numArtistRadios < 1 {
-		numArtistRadios = 1
-	}
-	if numArtistRadios > 20 {
-		numArtistRadios = 20
-	}
-	numGenreRadios := host.GetConfigInt("numGenreRadios", 3)
-	if numGenreRadios < 1 {
-		numGenreRadios = 1
-	}
-	if numGenreRadios > 10 {
-		numGenreRadios = 10
-	}
-	onRepeatEnabled := host.GetConfigString("enableOnRepeat", "true") == "true"
-	releaseRadarEnabled := host.GetConfigString("enableReleaseRadar", "true") == "true"
-	lovedMixEnabled := host.GetConfigString("enableLovedMix", "true") == "true"
-	dailyDiscoveryEnabled := host.GetConfigString("enableDailyDiscovery", "true") == "true"
-	artistRadioEnabled := host.GetConfigString("enableArtistRadio", "true") == "true"
-	genreRadioEnabled := host.GetConfigString("enableGenreRadio", "true") == "true"
-	forgottenEnabled := host.GetConfigString("enableForgottenFavorites", "true") == "true"
+	configs := getConfigs()
+	for _, config := range configs {
+		username := config.Username
+		dailyMixCount := config.DailyMixCount
+		if dailyMixCount < 1 {
+			dailyMixCount = 1
+		}
+		if dailyMixCount > 6 {
+			dailyMixCount = 6
+		}
+		numArtistRadios := config.NumArtistRadios
+		if numArtistRadios < 1 {
+			numArtistRadios = 1
+		}
+		if numArtistRadios > 20 {
+			numArtistRadios = 20
+		}
+		numGenreRadios := config.NumGenreRadios
+		if numGenreRadios < 1 {
+			numGenreRadios = 1
+		}
+		if numGenreRadios > 10 {
+			numGenreRadios = 10
+		}
+		onRepeatEnabled := config.EnableOnRepeat
+		releaseRadarEnabled := config.EnableReleaseRadar
+		lovedMixEnabled := config.EnableLovedMix
+		dailyDiscoveryEnabled := config.EnableDailyDiscovery
+		artistRadioEnabled := config.EnableArtistRadio
+		genreRadioEnabled := config.EnableGenreRadio
+		forgottenEnabled := config.EnableForgottenFavorites
 
-	playlists := getAllPlaylists()
-	seenBaseNames := make(map[string]string)
+		playlists := getAllPlaylists(username)
+		seenBaseNames := make(map[string]string)
 
-	for _, p := range playlists {
-		isSmart := false
-		baseName := ""
-		deleteNow := false
+					for _, p := range playlists {
+				if p.Owner != username {
+					continue
+				}
+			isSmart := false
+			baseName := ""
+			deleteNow := false
 
-		switch {
-		case strings.Contains(p.Name, "Daily Mix "):
-			isSmart = true
-			for i := 1; i <= 6; i++ {
-				slotStr := fmt.Sprintf("Daily Mix %d", i)
-				if strings.HasSuffix(p.Name, slotStr) {
-					baseName = slotStr
-					deleteNow = i > dailyMixCount
-					break
+			switch {
+			case strings.Contains(p.Name, config.Prefix+"Daily Mix "):
+				isSmart = true
+				for i := 1; i <= 6; i++ {
+					slotStr := config.Prefix + fmt.Sprintf("Daily Mix %d", i)
+					if strings.HasSuffix(p.Name, slotStr) {
+						baseName = slotStr
+						deleteNow = i > dailyMixCount
+						break
+					}
+				}
+			case strings.HasSuffix(p.Name, config.Prefix+"Weekly Discovery"):
+				isSmart, baseName, deleteNow = true, config.Prefix + "Weekly Discovery", true
+			case strings.HasSuffix(p.Name, config.Prefix+"Daily Discovery"):
+				isSmart, baseName, deleteNow = true, config.Prefix + "Daily Discovery", !dailyDiscoveryEnabled
+			case strings.HasSuffix(p.Name, config.Prefix+"Forgotten Favorites"):
+				isSmart, baseName, deleteNow = true, config.Prefix + "Forgotten Favorites", !forgottenEnabled
+			case strings.HasSuffix(p.Name, config.Prefix+"On Repeat"):
+				isSmart, baseName, deleteNow = true, config.Prefix + "On Repeat", !onRepeatEnabled
+			case strings.HasSuffix(p.Name, config.Prefix+"Release Radar"):
+				isSmart, baseName, deleteNow = true, config.Prefix + "Release Radar", !releaseRadarEnabled
+			case strings.HasSuffix(p.Name, config.Prefix+"Your Loved Songs Mix"):
+				isSmart, baseName, deleteNow = true, config.Prefix + "Your Loved Songs Mix", !lovedMixEnabled
+			case strings.Contains(p.Name, config.Prefix+"Artist Radio "):
+				isSmart = true
+				for i := 1; i <= 20; i++ {
+					slotStr := fmt.Sprintf("Artist Radio %d:", i)
+					if strings.Contains(p.Name, slotStr) {
+						baseName = config.Prefix + fmt.Sprintf("Artist Radio %d", i)
+						deleteNow = !artistRadioEnabled || i > numArtistRadios
+						break
+					}
+				}
+			case strings.Contains(p.Name, config.Prefix+"Genre Radio "):
+				isSmart = true
+				for i := 1; i <= 10; i++ {
+					slotStr := fmt.Sprintf("Genre Radio %d:", i)
+					if strings.Contains(p.Name, slotStr) {
+						baseName = config.Prefix + fmt.Sprintf("Genre Radio %d", i)
+						deleteNow = !genreRadioEnabled || i > numGenreRadios
+						break
+					}
 				}
 			}
-		case strings.HasSuffix(p.Name, "Weekly Discovery"):
-			isSmart, baseName, deleteNow = true, "Weekly Discovery", true
-		case strings.HasSuffix(p.Name, "Daily Discovery"):
-			isSmart, baseName, deleteNow = true, "Daily Discovery", !dailyDiscoveryEnabled
-		case strings.HasSuffix(p.Name, "Forgotten Favorites"):
-			isSmart, baseName, deleteNow = true, "Forgotten Favorites", !forgottenEnabled
-		case strings.HasSuffix(p.Name, "On Repeat"):
-			isSmart, baseName, deleteNow = true, "On Repeat", !onRepeatEnabled
-		case strings.HasSuffix(p.Name, "Release Radar"):
-			isSmart, baseName, deleteNow = true, "Release Radar", !releaseRadarEnabled
-		case strings.HasSuffix(p.Name, "Your Loved Songs Mix"):
-			isSmart, baseName, deleteNow = true, "Your Loved Songs Mix", !lovedMixEnabled
-		case strings.Contains(p.Name, "Artist Radio "):
-			isSmart = true
-			for i := 1; i <= 20; i++ {
-				slotStr := fmt.Sprintf("Artist Radio %d:", i)
-				if strings.Contains(p.Name, slotStr) {
-					baseName = fmt.Sprintf("Artist Radio %d", i)
-					deleteNow = !artistRadioEnabled || i > numArtistRadios
-					break
-				}
-			}
-		case strings.Contains(p.Name, "Genre Radio "):
-			isSmart = true
-			for i := 1; i <= 10; i++ {
-				slotStr := fmt.Sprintf("Genre Radio %d:", i)
-				if strings.Contains(p.Name, slotStr) {
-					baseName = fmt.Sprintf("Genre Radio %d", i)
-					deleteNow = !genreRadioEnabled || i > numGenreRadios
-					break
-				}
-			}
-		}
 
-		if !isSmart || baseName == "" {
-			continue
-		}
-		if deleteNow {
-			deletePlaylist(p.ID)
-			continue
-		}
-		if _, ok := seenBaseNames[baseName]; ok {
-			deletePlaylist(p.ID)
-		} else {
-			seenBaseNames[baseName] = p.ID
+			if !isSmart || baseName == "" {
+				continue
+			}
+			if deleteNow {
+				deletePlaylist(username, p.ID)
+				continue
+			}
+			if _, ok := seenBaseNames[baseName]; ok {
+				deletePlaylist(username, p.ID)
+			} else {
+				seenBaseNames[baseName] = p.ID
+			}
 		}
 	}
 }
